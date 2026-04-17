@@ -104,7 +104,7 @@ fn top_handler(
       )
 
     Error(Nil) -> {
-      let authorize =
+      let #(authorize_uri, state) =
         oauth.authorize_uri(
           uri: config.authorize_uri,
           client_id: config.client_id,
@@ -112,8 +112,8 @@ fn top_handler(
           scope: ["openid", "profile", "email"],
         )
 
-      store.save(config.store, authorize)
-      wisp.redirect(uri.to_string(authorize.uri))
+      store.save(config.store, state)
+      wisp.redirect(uri.to_string(authorize_uri))
     }
   }
 }

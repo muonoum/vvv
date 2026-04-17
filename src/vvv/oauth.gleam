@@ -8,8 +8,8 @@ import gleam/result
 import gleam/string
 import gleam/uri.{type Uri, Uri}
 
-pub type Authorize {
-  Authorize(uri: Uri, state: String, nonce: String, code_verifier: String)
+pub type State {
+  State(state: String, nonce: String, code_verifier: String)
 }
 
 fn random_string(length: Int) -> String {
@@ -22,7 +22,7 @@ pub fn authorize_uri(
   client_id client_id: String,
   redirect_uri redirect_uri: Uri,
   scope scope: List(String),
-) -> Authorize {
+) -> #(Uri, State) {
   let code_verifier = random_string(32)
 
   let code_challenge =
@@ -46,7 +46,7 @@ pub fn authorize_uri(
     ])
 
   let uri = Uri(..uri, query: option.Some(query))
-  Authorize(uri:, state:, nonce:, code_verifier:)
+  #(uri, State(state:, nonce:, code_verifier:))
 }
 
 pub fn token_request(

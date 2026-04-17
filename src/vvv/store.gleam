@@ -12,25 +12,22 @@ const call_timeout: Int = 1000
 const shutdown_timeout: Int = 1000
 
 pub opaque type Model {
-  Model(state: Dict(String, oauth.Authorize))
+  Model(state: Dict(String, oauth.State))
 }
 
 pub opaque type Message {
-  Save(subject: process.Subject(Nil), authorize: oauth.Authorize)
-  Load(subject: process.Subject(Result(oauth.Authorize, Nil)), state: String)
+  Save(subject: process.Subject(Nil), authorize: oauth.State)
+  Load(subject: process.Subject(Result(oauth.State, Nil)), state: String)
 }
 
 pub fn load(
   store: process.Subject(Message),
   state: String,
-) -> Result(oauth.Authorize, Nil) {
+) -> Result(oauth.State, Nil) {
   process.call(store, call_timeout, Load(_, state))
 }
 
-pub fn save(
-  store: process.Subject(Message),
-  authorize: oauth.Authorize,
-) -> Nil {
+pub fn save(store: process.Subject(Message), authorize: oauth.State) -> Nil {
   process.call(store, call_timeout, Save(_, authorize))
 }
 
