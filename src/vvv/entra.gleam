@@ -8,23 +8,23 @@ import gleam/result
 // https://learn.microsoft.com/en-us/entra/identity-platform/v2-oauth2-auth-code-flow
 
 // HACK: Entra setter ikke 'alg' på nøklene sine
-pub fn update_keys(
+pub fn set_key_algorithm(
   data: BitArray,
-  algorithm alg: String,
+  algorithm algorithm: String,
 ) -> Result(BitArray, json.DecodeError) {
   let key_decoder = {
-    use kid <- decode.field("kid", decode.string)
-    use kty <- decode.field("kty", decode.string)
-    use e <- decode.field("e", decode.string)
-    use n <- decode.field("n", decode.string)
+    use key_id <- decode.field("kid", decode.string)
+    use key_type <- decode.field("kty", decode.string)
+    use exponent <- decode.field("e", decode.string)
+    use modulus <- decode.field("n", decode.string)
 
     decode.success(
       dict.from_list([
-        #("kid", kid),
-        #("kty", kty),
-        #("alg", alg),
-        #("e", e),
-        #("n", n),
+        #("kid", key_id),
+        #("kty", key_type),
+        #("alg", algorithm),
+        #("e", exponent),
+        #("n", modulus),
       ]),
     )
   }
