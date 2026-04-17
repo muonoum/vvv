@@ -16,20 +16,15 @@ import gleam/string
 import gleam/uri.{type Uri}
 import lustre/element
 import mist
+import snag
 import vvv/component
 import vvv/config.{type Config}
 import vvv/extra/httpc
 import vvv/frontend
 import wisp
 import ywt
+import ywt/claim
 import ywt/verify_key
-
-type Error {
-  UnknownError
-  HttpError(httpc.Error)
-  JsonError(json.DecodeError)
-  JwtError(ywt.ParseError)
-}
 
 pub fn service(
   request: wisp.Request,
@@ -143,10 +138,12 @@ fn callback_handler(request: wisp.Request, config: Config) -> wisp.Response {
   let result = {
     use keys <- result.try(get_keys(config.keys_uri))
     use token <- result.try(get_token(config, code))
+    let claims = [claim.issuer(uri.to_string(config.auth_base_uri), [])]
 
     use user_id <- result.try(
-      ywt.decode(jwt: token, using: token_decoder(), claims: [], keys:)
-      |> result.map_error(JwtError),
+      ywt.decode(jwt: token, using: token_decoder(), claims:, keys:)
+      |> snag.map_error(string.inspect)
+      |> snag.context("could not decode token"),
     )
 
     Ok(user_id)
@@ -164,7 +161,7 @@ fn callback_handler(request: wisp.Request, config: Config) -> wisp.Response {
       )
 
     Error(error) -> {
-      wisp.log_error(string.inspect(error))
+      wisp.log_error(snag.line_print(error))
       wisp.internal_server_error()
     }
   }
@@ -173,22 +170,24 @@ fn callback_handler(request: wisp.Request, config: Config) -> wisp.Response {
 fn get_keys(keys_uri: Uri) {
   use request <- result.try(
     request.from_uri(keys_uri)
-    |> result.replace_error(UnknownError),
+    |> snag.replace_error("could not create keys request"),
   )
 
   use response <- result.try(
     httpc.send(request.set_body(request, option.None), [])
-    |> result.map_error(HttpError),
+    |> snag.map_error(string.inspect)
+    |> snag.context("could not send key request"),
   )
 
   json.parse_bits(response.body, verify_key.set_decoder())
-  |> result.map_error(JsonError)
+  |> snag.map_error(string.inspect)
+  |> snag.context("could not parse keys response")
 }
 
 fn get_token(config: Config, code: String) {
   use request <- result.try(
     request.from_uri(config.token_uri)
-    |> result.replace_error(UnknownError),
+    |> snag.replace_error("could not create token request"),
   )
 
   let credentials =
@@ -201,11 +200,12 @@ fn get_token(config: Config, code: String) {
     |> request.set_header("authorization", "Basic " <> credentials)
     |> request.set_body(option.None)
     |> httpc.send([])
-    |> result.map_error(HttpError),
+    |> snag.map_error(string.inspect)
+    |> snag.context("could not send token request"),
   )
 
   bit_array.to_string(response.body)
-  |> result.replace_error(UnknownError)
+  |> snag.replace_error("bad token response")
 }
 
 fn token_decoder() -> Decoder(String) {

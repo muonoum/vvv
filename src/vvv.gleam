@@ -66,6 +66,7 @@ pub fn main() -> Nil {
       cookie_name: "vvv",
       client_id: auth_client_id,
       client_secret: auth_client_secret,
+      auth_base_uri:,
       authorize_uri:,
       callback_uri:,
       token_uri:,

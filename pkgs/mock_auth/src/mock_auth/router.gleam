@@ -4,14 +4,18 @@ import gleam/list
 import gleam/option.{Some}
 import gleam/result
 import gleam/time/duration
-import gleam/uri.{Uri}
+import gleam/uri.{type Uri, Uri}
 import wisp
 import ywt
 import ywt/claim
 import ywt/sign_key.{type SignKey}
 import ywt/verify_key
 
-pub fn service(request: wisp.Request, key: SignKey) -> wisp.Response {
+pub fn service(
+  request: wisp.Request,
+  base_uri: Uri,
+  key: SignKey,
+) -> wisp.Response {
   use <- wisp.rescue_crashes
   use request <- wisp.handle_head(request)
   use request <- wisp.csrf_known_header_protection(request)
@@ -19,7 +23,7 @@ pub fn service(request: wisp.Request, key: SignKey) -> wisp.Response {
 
   case request.method, wisp.path_segments(request) {
     http.Get, ["authorize"] -> authorize_handler(request)
-    http.Get, ["token"] -> token_handler(request, key)
+    http.Get, ["token"] -> token_handler(request, base_uri, key)
 
     http.Get, [".well-known", "jwks.json"] -> {
       verify_key.to_jwks([verify_key.derived(key)])
@@ -47,12 +51,18 @@ fn authorize_handler(request: wisp.Request) -> wisp.Response {
   wisp.redirect(uri.to_string(redirect_uri))
 }
 
-fn token_handler(request: wisp.Request, sign_key: SignKey) -> wisp.Response {
+fn token_handler(
+  request: wisp.Request,
+  base_uri: Uri,
+  sign_key: SignKey,
+) -> wisp.Response {
   let query = wisp.get_query(request)
   let assert Ok(_code) = list.key_find(query, "code")
   let payload = []
 
   let claims = [
+    claim.issuer(uri.to_string(base_uri), []),
+    // claim.audience("TODO", []),
     claim.subject("mock-user", []),
     claim.expires_at(max_age: duration.seconds(10), leeway: duration.seconds(5)),
   ]

@@ -3,6 +3,7 @@ import gleam/erlang/process
 import gleam/int
 import gleam/otp/static_supervisor as supervisor
 import gleam/result
+import gleam/uri
 import mist
 import mock_auth/router
 import wisp
@@ -23,10 +24,16 @@ pub fn main() -> Nil {
     wisp.random_string(64)
   }
 
+  let assert Ok(base_uri) = {
+    use uri_string <- result.try(envoy.get("BASE_URI"))
+    uri.parse(uri_string)
+  }
+    as "BASE_URI"
+
   let key = ywt.generate_key(algorithm.es384)
 
   let server_spec =
-    router.service(_, key)
+    router.service(_, base_uri, key)
     |> wisp_mist.handler(secret_key_base)
     |> mist.new
     |> mist.bind(http_address)

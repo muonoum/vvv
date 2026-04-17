@@ -5,6 +5,7 @@ pub type Config {
     cookie_name: String,
     client_id: String,
     client_secret: String,
+    auth_base_uri: Uri,
     authorize_uri: Uri,
     callback_uri: Uri,
     token_uri: Uri,
