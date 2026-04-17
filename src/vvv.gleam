@@ -13,6 +13,7 @@ import mist
 import vvv/components/app
 import vvv/config.{Config}
 import vvv/router
+import vvv/store
 import wisp
 import wisp/wisp_mist
 
@@ -31,47 +32,43 @@ pub fn main() -> Nil {
     wisp.random_string(64)
   }
 
-  let assert Ok(base_uri) = {
-    use uri_string <- result.try(envoy.get("BASE_URI"))
-    uri.parse(uri_string)
-  }
-    as "BASE_URI"
+  let assert Ok(client_id) = envoy.get("CLIENT_ID") as "CLIENT_ID"
 
-  let assert Ok(callback_uri) =
-    result.try(uri.parse("/callback"), uri.merge(base_uri, _))
+  let assert Ok(client_secret) = envoy.get("CLIENT_SECRET") as "CLIENT_SECRET"
 
-  let assert Ok(auth_base_uri) = {
-    use uri_string <- result.try(envoy.get("AUTH_BASE_URI"))
-    uri.parse(uri_string)
-  }
-    as "AUTH_BASE_URI"
-
-  let assert Ok(auth_client_id) = envoy.get("AUTH_CLIENT_ID")
-    as "AUTH_CLIENT_ID"
-
-  let assert Ok(auth_client_secret) = envoy.get("AUTH_CLIENT_SECRET")
-    as "AUTH_CLIENT_SECRET"
+  let assert Ok(redirect_uri) =
+    envoy.get("REDIRECT_URI")
+    |> result.try(uri.parse)
+    as "REDIRECT_URI"
 
   let assert Ok(authorize_uri) =
-    result.try(uri.parse("/authorize"), uri.merge(auth_base_uri, _))
+    envoy.get("AUTHORIZE_URI")
+    |> result.try(uri.parse)
+    as "AUTHORIZE_URI"
+
+  let assert Ok(jwks_uri) =
+    envoy.get("JWKS_URI")
+    |> result.try(uri.parse)
+    as "JWKS_URI"
 
   let assert Ok(token_uri) =
-    result.try(uri.parse("/token"), uri.merge(auth_base_uri, _))
+    envoy.get("TOKEN_URI")
+    |> result.try(uri.parse)
+    as "TOKEN_URI"
 
-  let assert Ok(keys_uri) =
-    result.try(uri.parse("/.well-known/jwks.json"), uri.merge(auth_base_uri, _))
+  let store_name = process.new_name("vvv-store")
+  let store_spec = store.supervised(store_name)
+  let store = process.named_subject(store_name)
 
   let config =
     Config(
-      cookie_name: "vvv",
-      client_id: auth_client_id,
-      client_secret: auth_client_secret,
-      auth_base_uri:,
+      store:,
+      client_id:,
+      client_secret:,
+      redirect_uri:,
       authorize_uri:,
-      callback_uri:,
+      jwks_uri:,
       token_uri:,
-      keys_uri:,
-      callback_state: wisp.random_string(8),
     )
 
   let app_component_name = process.new_name("vvv")
@@ -94,6 +91,7 @@ pub fn main() -> Nil {
   let assert Ok(_) =
     supervisor.start({
       supervisor.new(supervisor.OneForOne)
+      |> supervisor.add(store_spec)
       |> supervisor.add(app_spec)
       |> supervisor.add(server_spec)
     })

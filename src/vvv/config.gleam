@@ -1,15 +1,15 @@
+import gleam/erlang/process
 import gleam/uri.{type Uri}
+import vvv/store
 
 pub type Config {
   Config(
-    cookie_name: String,
+    store: process.Subject(store.Message),
     client_id: String,
     client_secret: String,
-    auth_base_uri: Uri,
+    redirect_uri: Uri,
     authorize_uri: Uri,
-    callback_uri: Uri,
+    jwks_uri: Uri,
     token_uri: Uri,
-    keys_uri: Uri,
-    callback_state: String,
   )
 }

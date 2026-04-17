@@ -4,10 +4,6 @@ watch := watchexec --clear --quiet --restart --stop-signal INT --stop-timeout 15
 dev:
 	HTTP_PORT=1980 \
 	SECRET_KEY_BASE=VPJ4WamuGU6kGoQ3UfXlozI0yGbZ06dVFTzpE6ztdWKjiHXEpo \
-	BASE_URI=http://localhost:1980 \
-	AUTH_BASE_URI=http://localhost:1981 \
-	AUTH_CLIENT_ID=vvv-dev \
-	AUTH_CLIENT_SECRET=vvv-dev \
 	make watch
 
 .PHONY: run

@@ -1,14 +1,14 @@
 import gleam/bit_array
 import gleam/bool
 import gleam/bytes_tree
-import gleam/dynamic/decode.{type Decoder}
+import gleam/dynamic/decode
 import gleam/function.{identity}
 import gleam/http
 import gleam/http/request.{type Request}
-import gleam/http/response.{type Response}
+import gleam/http/response.{type Response, Response}
 import gleam/json
 import gleam/list
-import gleam/option
+import gleam/option.{None}
 import gleam/otp/actor
 import gleam/otp/factory_supervisor
 import gleam/result
@@ -21,10 +21,14 @@ import vvv/component
 import vvv/config.{type Config}
 import vvv/extra/httpc
 import vvv/frontend
+import vvv/oauth
+import vvv/store
 import wisp
 import ywt
 import ywt/claim
 import ywt/verify_key
+
+const id_cookie = "vvv-id"
 
 pub fn service(
   request: wisp.Request,
@@ -33,15 +37,22 @@ pub fn service(
 ) -> wisp.Response {
   use <- wisp.rescue_crashes
   use request <- wisp.handle_head(request)
-  use request <- wisp.csrf_known_header_protection(request)
   use csp_nonce <- wisp.content_security_policy_protection()
   use <- serve_static(request)
   use <- wisp.log_request(request)
 
   case request.method, wisp.path_segments(request) {
-    http.Get, [] -> top_handler(request, config, csp_nonce)
-    http.Get, ["logout"] -> logout_handler(request, config)
-    http.Get, ["callback"] -> callback_handler(request, config)
+    http.Get, [] -> {
+      use request <- wisp.csrf_known_header_protection(request)
+      top_handler(request, config, csp_nonce)
+    }
+
+    http.Get, ["logout"] -> {
+      use request <- wisp.csrf_known_header_protection(request)
+      logout_handler(request)
+    }
+
+    http.Post, ["callback"] -> callback_handler(request, config)
     _method, _segments -> wisp.not_found()
   }
 }
@@ -84,7 +95,7 @@ fn top_handler(
   config: Config,
   csp_nonce: String,
 ) -> wisp.Response {
-  case wisp.get_cookie(request, config.cookie_name, wisp.Signed) {
+  case wisp.get_cookie(request, id_cookie, wisp.Signed) {
     Ok(user_id) ->
       wisp.ok()
       |> wisp.html_body(
@@ -93,31 +104,29 @@ fn top_handler(
       )
 
     Error(Nil) -> {
-      let query =
-        option.Some(
-          uri.query_to_string([
-            #("client_id", config.client_id),
-            #("redirect_uri", uri.to_string(config.callback_uri)),
-            #("state", config.callback_state),
-          ]),
+      let authorize =
+        oauth.authorize_uri(
+          uri: config.authorize_uri,
+          client_id: config.client_id,
+          redirect_uri: config.redirect_uri,
+          scope: ["openid", "profile", "email"],
         )
 
-      uri.Uri(..config.authorize_uri, query:)
-      |> uri.to_string
-      |> wisp.redirect
+      store.save(config.store, authorize)
+      wisp.redirect(uri.to_string(authorize.uri))
     }
   }
 }
 
-fn logout_handler(request: wisp.Request, config: Config) -> wisp.Response {
-  case wisp.get_cookie(request, config.cookie_name, wisp.Signed) {
+fn logout_handler(request: wisp.Request) -> wisp.Response {
+  case wisp.get_cookie(request, id_cookie, wisp.Signed) {
     Error(Nil) -> wisp.redirect("/")
 
     Ok(value) ->
       wisp.redirect("/")
       |> wisp.set_cookie(
         request:,
-        name: config.cookie_name,
+        name: id_cookie,
         value:,
         security: wisp.Signed,
         max_age: 0,
@@ -126,36 +135,55 @@ fn logout_handler(request: wisp.Request, config: Config) -> wisp.Response {
 }
 
 fn callback_handler(request: wisp.Request, config: Config) -> wisp.Response {
-  let query = wisp.get_query(request)
-  let assert Ok(code) = list.key_find(query, "code")
-  let assert Ok(callback_state) = list.key_find(query, "state")
+  use form_data <- wisp.require_form(request)
+
+  let assert Ok(code) = list.key_find(form_data.values, "code")
+  let assert Ok(callback_state) = list.key_find(form_data.values, "state")
+  let assert Ok(id_token) = list.key_find(form_data.values, "id_token")
+  let assert Ok(authorize) = store.load(config.store, callback_state)
 
   use <- bool.guard(
-    callback_state != config.callback_state,
+    callback_state != authorize.state,
     wisp.bad_request("bad state"),
   )
 
   let result = {
-    use keys <- result.try(get_keys(config.keys_uri))
-    use token <- result.try(get_token(config, code))
-    let claims = [claim.issuer(uri.to_string(config.auth_base_uri), [])]
+    use keys <- result.try(get_keys(config.jwks_uri))
+    use token <- result.try(get_token(config, authorize.code_verifier, code))
+    echo #("access_token", token)
 
-    use user_id <- result.try(
-      ywt.decode(jwt: token, using: token_decoder(), claims:, keys:)
+    let claims = [
+      claim.audience(config.client_id, []),
+      claim.custom(
+        name: "nonce",
+        value: authorize.nonce,
+        decoder: decode.string,
+        encode: json.string,
+      ),
+    ]
+
+    let token_decoder = {
+      use name <- decode.field("name", decode.string)
+      use email <- decode.field("email", decode.string)
+      decode.success(#(name, email))
+    }
+
+    use id_token <- result.try(
+      ywt.decode(jwt: id_token, using: token_decoder, claims:, keys:)
       |> snag.map_error(string.inspect)
       |> snag.context("could not decode token"),
     )
 
-    Ok(user_id)
+    Ok(id_token)
   }
 
   case result {
-    Ok(user_id) ->
+    Ok(#(_name, email)) ->
       wisp.redirect("/")
       |> wisp.set_cookie(
         request:,
-        name: config.cookie_name,
-        value: user_id,
+        name: id_cookie,
+        value: email,
         security: wisp.Signed,
         max_age: 60 * 60 * 24,
       )
@@ -173,32 +201,33 @@ fn get_keys(keys_uri: Uri) {
     |> snag.replace_error("could not create keys request"),
   )
 
-  use response <- result.try(
-    httpc.send(request.set_body(request, option.None), [])
+  use Response(body:, ..) <- result.try(
+    httpc.send(request.set_body(request, None), [])
     |> snag.map_error(string.inspect)
     |> snag.context("could not send key request"),
   )
 
-  json.parse_bits(response.body, verify_key.set_decoder())
+  json.parse_bits(body, verify_key.set_decoder())
   |> snag.map_error(string.inspect)
-  |> snag.context("could not parse keys response")
+  |> snag.context("could not parse keys")
 }
 
-fn get_token(config: Config, code: String) {
-  use request <- result.try(
-    request.from_uri(config.token_uri)
+fn get_token(config: Config, code_verifier: String, code: String) {
+  use token_request <- result.try(
+    oauth.token_request(
+      uri: config.token_uri,
+      client_id: config.client_id,
+      client_secret: config.client_secret,
+      redirect_uri: config.redirect_uri,
+      scope: ["openid", "profile", "email"],
+      code_verifier:,
+      code:,
+    )
     |> snag.replace_error("could not create token request"),
   )
 
-  let credentials =
-    <<config.client_id:utf8, ":":utf8, config.client_secret:utf8>>
-    |> bit_array.base64_url_encode(True)
-
   use response <- result.try(
-    request
-    |> request.set_query([#("code", code)])
-    |> request.set_header("authorization", "Basic " <> credentials)
-    |> request.set_body(option.None)
+    token_request
     |> httpc.send([])
     |> snag.map_error(string.inspect)
     |> snag.context("could not send token request"),
@@ -206,9 +235,4 @@ fn get_token(config: Config, code: String) {
 
   bit_array.to_string(response.body)
   |> snag.replace_error("bad token response")
-}
-
-fn token_decoder() -> Decoder(String) {
-  use sub <- decode.field("sub", decode.string)
-  decode.success(sub)
 }
