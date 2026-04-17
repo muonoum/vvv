@@ -14,14 +14,6 @@ run: frontend
 watch: .restart
 	$(watch) make run --no-print-directory
 
-.PHONY: run-mock-auth
-run-mock-auth:
-	cd pkgs/mock_auth && gleam run
-
-.PHONY: watch-mock-auth
-watch-mock-auth: .restart
-	$(watch) make run-mock-auth --no-print-directory
-
 .PHONY: frontend
 frontend:
 	mkdir -p priv/static
