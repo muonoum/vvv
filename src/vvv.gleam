@@ -31,8 +31,8 @@ pub fn main() -> Nil {
 
   let assert Ok(oauth_config) = oauth.from_environment()
 
-  let app_component_name = process.new_name("vvv")
-  let store_name = process.new_name("vvv-store")
+  let app_component_name = process.new_name("app")
+  let store_name = process.new_name("store")
   let store = process.named_subject(store_name)
 
   let store_spec = store.supervised(store_name)
