@@ -3,7 +3,7 @@ import gleam/erlang/process
 import gleam/function
 import gleam/otp/actor
 import gleam/otp/supervision
-import vvv/oauth
+import vvv/session.{type Session}
 
 const start_timeout: Int = 10_000
 
@@ -12,27 +12,32 @@ const call_timeout: Int = 1000
 const shutdown_timeout: Int = 1000
 
 pub opaque type Model {
-  Model(state: Dict(String, oauth.State))
+  Model(state: Dict(String, Session))
 }
 
 pub opaque type Message {
-  Save(subject: process.Subject(Nil), key: String, state: oauth.State)
-  Load(subject: process.Subject(Result(oauth.State, Nil)), key: String)
+  Insert(subject: process.Subject(Nil), id: String, session: Session)
+  Contains(subject: process.Subject(Bool), id: String)
+  Get(subject: process.Subject(Result(Session, Nil)), id: String)
 }
 
-pub fn load(
+pub fn insert(
   store: process.Subject(Message),
-  state: String,
-) -> Result(oauth.State, Nil) {
-  process.call(store, call_timeout, Load(_, state))
-}
-
-pub fn save(
-  store: process.Subject(Message),
-  key: String,
-  state: oauth.State,
+  id: String,
+  session: Session,
 ) -> Nil {
-  process.call(store, call_timeout, Save(_, key:, state:))
+  process.call(store, call_timeout, Insert(_, id:, session:))
+}
+
+pub fn contains(store: process.Subject(Message), id: String) -> Bool {
+  process.call(store, call_timeout, Contains(_, id))
+}
+
+pub fn get(
+  store: process.Subject(Message),
+  id: String,
+) -> Result(Session, Nil) {
+  process.call(store, call_timeout, Get(_, id))
 }
 
 pub fn start(
@@ -68,21 +73,26 @@ fn update() -> fn(Model, Message) -> actor.Next(Model, Message) {
   use model: Model, message: Message <- function.identity
 
   case message {
-    Save(subject:, key:, state:) -> {
+    Insert(subject:, id:, session:) -> {
       process.send(subject, Nil)
 
-      dict.insert(model.state, key, state)
+      dict.insert(model.state, id, session)
       |> Model(state: _)
       |> actor.continue
     }
 
-    Load(subject:, key:) -> {
-      dict.get(model.state, key)
+    Contains(subject:, id:) -> {
+      dict.has_key(model.state, id)
       |> process.send(subject, _)
 
-      dict.delete(model.state, key)
-      |> Model(state: _)
-      |> actor.continue
+      actor.continue(model)
+    }
+
+    Get(subject:, id:) -> {
+      dict.get(model.state, id)
+      |> process.send(subject, _)
+
+      actor.continue(model)
     }
   }
 }

@@ -6,7 +6,10 @@ pub fn random_string(length: Int) -> String {
   |> bit_array.base64_url_encode(False)
 }
 
-pub fn hashed_string(string: String) -> String {
+pub fn hashed_bytes(string: String) -> BitArray {
   crypto.hash(crypto.Sha256, <<string:utf8>>)
-  |> bit_array.base64_url_encode(False)
+}
+
+pub fn hashed_string(string: String) -> String {
+  bit_array.base64_url_encode(hashed_bytes(string), False)
 }

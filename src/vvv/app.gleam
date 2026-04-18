@@ -1,45 +1,73 @@
-import gleam/option.{type Option, None, Some}
-import gleam/string
+import gleam/erlang/process
+import gleam/option.{type Option}
 import lustre
 import lustre/attribute
 import lustre/component
 import lustre/effect.{type Effect}
 import lustre/element.{type Element}
 import lustre/element/html
+import vvv/session
+import vvv/store
 
 pub opaque type Model {
-  Model(user_id: Option(String))
+  Model(
+    store: process.Subject(store.Message),
+    session_id: Option(String),
+    user: Option(session.User),
+  )
 }
 
 pub opaque type Message {
-  UserNameReceived(String)
+  SessionIdReceived(String)
 }
 
-pub fn component() -> lustre.App(Nil, Model, Message) {
+pub fn component() -> lustre.App(process.Subject(store.Message), Model, Message) {
   lustre.component(init, update, view, options: [
-    component.on_attribute_change("user_id", fn(string) {
-      Ok(UserNameReceived(string))
+    component.on_attribute_change("session-id", fn(string) {
+      Ok(SessionIdReceived(string))
     }),
   ])
 }
 
-fn init(_flags) -> #(Model, Effect(Message)) {
-  let model = Model(user_id: None)
+fn init(store: process.Subject(store.Message)) -> #(Model, Effect(Message)) {
+  let model = Model(store:, session_id: option.None, user: option.None)
   #(model, effect.none())
 }
 
-fn update(_model: Model, message: Message) -> #(Model, Effect(Message)) {
+fn update(model: Model, message: Message) -> #(Model, Effect(Message)) {
   case message {
-    UserNameReceived(user_id) -> #(Model(user_id: Some(user_id)), effect.none())
+    SessionIdReceived(session_id) -> {
+      let assert Ok(session.UserSession(user)) =
+        store.get(model.store, session_id)
+
+      let model =
+        Model(
+          ..model,
+          session_id: option.Some(session_id),
+          user: option.Some(user),
+        )
+
+      #(model, effect.none())
+    }
   }
 }
 
 fn view(model: Model) -> Element(Message) {
-  html.div([attribute.class("flex gap-2 p-4")], [
-    html.div([], [element.text(string.inspect(model.user_id))]),
-    html.div([], [element.text("—")]),
-    html.a([attribute.class("underline"), attribute.href("/auth/logout")], [
-      element.text("login"),
-    ]),
-  ])
+  case model.user {
+    option.Some(user) ->
+      html.div([attribute.class("flex gap-2 p-4")], [
+        html.div([], [element.text(user.name)]),
+        html.div([], [element.text("—")]),
+        html.a([attribute.class("underline"), attribute.href("/auth/logout")], [
+          element.text("logout"),
+        ]),
+      ])
+
+    option.None ->
+      html.div([attribute.class("flex gap-2 p-4")], [
+        html.a([attribute.class("underline"), attribute.href("/auth/login")], [
+          element.text("login"),
+        ]),
+      ])
+  }
 }

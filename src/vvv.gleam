@@ -45,7 +45,7 @@ pub fn main() -> Nil {
   let server_spec =
     router.service(_, store, oauth_config, static_handler())
     |> wisp_mist.handler(secret_key_base)
-    |> router.component_router(app_name)
+    |> router.component_router(store, app_name)
     |> mist.new
     |> mist.bind(http_address)
     |> mist.port(http_port)

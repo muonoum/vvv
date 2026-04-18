@@ -1,4 +1,5 @@
 import gleam/bytes_tree
+import gleam/crypto
 import gleam/dynamic/decode.{type Decoder}
 import gleam/erlang/process
 import gleam/function.{identity}
@@ -7,9 +8,10 @@ import gleam/http/request.{type Request}
 import gleam/http/response.{type Response}
 import gleam/json
 import gleam/list
-import gleam/option
+import gleam/option.{type Option}
 import gleam/otp/actor
 import gleam/otp/factory_supervisor
+import gleam/result
 import gleam/string
 import gleam/uri
 import lustre/element
@@ -18,6 +20,7 @@ import vvv/component
 import vvv/frontend
 import vvv/httpc
 import vvv/oauth
+import vvv/session
 import vvv/shared
 import vvv/store
 import wisp
@@ -25,9 +28,7 @@ import ywt
 import ywt/claim
 import ywt/verify_key
 
-const id_cookie = "vvv-id"
-
-const auth_cookie = "vvv-auth"
+const session_cookie = "vvv-session"
 
 pub fn service(
   request: wisp.Request,
@@ -42,12 +43,16 @@ pub fn service(
   use <- wisp.log_request(request)
 
   case request.method, wisp.path_segments(request) {
-    http.Get, [] -> root_handler(request, store, oauth_config, csp_nonce)
+    http.Get, [] -> root_handler(request, store:, csp_nonce:)
+
+    http.Get, ["auth", "login"] ->
+      auth_login_handler(request, store:, oauth_config:)
+
     http.Get, ["auth", "logout"] -> auth_logout_handler(request)
     http.Post, ["auth", "callback"] -> auth_callback_handler(request)
 
     http.Get, ["auth", "done"] ->
-      auth_done_handler(request, store, oauth_config)
+      auth_done_handler(request, store:, oauth_config:)
 
     _method, _segments -> wisp.not_found()
   }
@@ -55,12 +60,13 @@ pub fn service(
 
 pub fn component_router(
   next_router: fn(Request(_)) -> Response(_),
-  app: component.Name(Nil, message),
+  store: process.Subject(store.Message),
+  app: component.Name(process.Subject(store.Message), message),
 ) -> fn(Request(_)) -> Response(_) {
   use request <- identity
 
   case wisp.path_segments(request) {
-    ["components", "app"] -> component_service(request, app, Nil)
+    ["components", "app"] -> component_service(request, app, store)
     _else -> next_router(request)
   }
 }
@@ -86,60 +92,86 @@ fn component_service(
   }
 }
 
+fn render_page(session_id: Option(String), csp_nonce: String) -> wisp.Response {
+  wisp.ok()
+  |> wisp.html_body(
+    element.to_document_string(frontend.page(
+      page_title: "vvv",
+      session_id:,
+      csp_nonce:,
+    )),
+  )
+}
+
+fn delete_session(
+  response: wisp.Response,
+  request: wisp.Request,
+) -> wisp.Response {
+  response
+  |> wisp.set_cookie(
+    request:,
+    name: session_cookie,
+    value: "",
+    security: wisp.Signed,
+    max_age: 0,
+  )
+}
+
 fn root_handler(
   request: wisp.Request,
-  store: process.Subject(store.Message),
-  oauth_config: oauth.Config,
-  csp_nonce: String,
+  store store: process.Subject(store.Message),
+  csp_nonce csp_nonce: String,
 ) -> wisp.Response {
   use request <- wisp.csrf_known_header_protection(request)
 
-  case wisp.get_cookie(request, id_cookie, wisp.Signed) {
-    Ok(user_id) ->
-      wisp.ok()
-      |> wisp.html_body(
-        frontend.page(page_title: "vvv", user_id:, csp_nonce:)
-        |> element.to_document_string,
-      )
+  case wisp.get_cookie(request, session_cookie, wisp.Signed) {
+    Error(Nil) -> render_page(option.None, csp_nonce)
 
-    Error(Nil) -> {
-      let #(uri, key, state) =
-        oauth.authorize(
-          uri: oauth_config.authorize_uri,
-          client_id: oauth_config.client_id,
-          redirect_uri: oauth_config.redirect_uri,
-          scope: ["openid", "profile", "email"],
-        )
+    Ok(session_id) -> {
+      case store.contains(store, session_id) {
+        True -> render_page(option.Some(session_id), csp_nonce)
 
-      store.save(store, key, state)
-
-      wisp.redirect(uri.to_string(uri))
-      |> wisp.set_cookie(
-        request:,
-        name: auth_cookie,
-        value: key,
-        security: wisp.Signed,
-        max_age: 10,
-      )
+        False ->
+          render_page(option.None, csp_nonce)
+          |> delete_session(request)
+      }
     }
   }
+}
+
+fn auth_login_handler(
+  request: wisp.Request,
+  store store: process.Subject(store.Message),
+  oauth_config oauth_config: oauth.Config,
+) -> wisp.Response {
+  let #(authorize_uri, session_id, oauth_state) =
+    oauth.authorize(
+      uri: oauth_config.authorize_uri,
+      client_id: oauth_config.client_id,
+      redirect_uri: oauth_config.redirect_uri,
+      scope: ["openid", "profile", "email"],
+    )
+
+  session.LoginSession(oauth_state)
+  |> store.insert(store, session_id, _)
+
+  uri.to_string(authorize_uri)
+  |> wisp.redirect
+  |> wisp.set_cookie(
+    request:,
+    name: session_cookie,
+    value: session_id,
+    security: wisp.Signed,
+    max_age: 30,
+  )
 }
 
 fn auth_logout_handler(request: wisp.Request) -> wisp.Response {
   use request <- wisp.csrf_known_header_protection(request)
 
-  case wisp.get_cookie(request, id_cookie, wisp.Signed) {
+  case wisp.get_cookie(request, session_cookie, wisp.Signed) {
     Error(Nil) -> wisp.redirect("/")
-
-    Ok(value) ->
-      wisp.redirect("/")
-      |> wisp.set_cookie(
-        request:,
-        name: id_cookie,
-        value:,
-        security: wisp.Signed,
-        max_age: 0,
-      )
+    Ok(..) -> wisp.redirect("/") |> delete_session(request)
   }
 }
 
@@ -163,22 +195,26 @@ fn auth_callback_handler(request: wisp.Request) -> wisp.Response {
 
 fn auth_done_handler(
   request: Request(wisp.Connection),
-  store: process.Subject(store.Message),
-  oauth_config: oauth.Config,
+  store store: process.Subject(store.Message),
+  oauth_config oauth_config: oauth.Config,
 ) -> Response(wisp.Body) {
   use request <- wisp.csrf_known_header_protection(request)
-
-  let assert Ok(auth_key) =
-    wisp.get_cookie(request:, name: auth_cookie, security: wisp.Signed)
-
   let assert Ok(query) = request.get_query(request)
-  let session_hash = shared.hashed_string(auth_key)
-  let assert Ok(state) = list.key_find(query, "state")
-  assert state == session_hash
+
+  let assert Ok(session_id) =
+    wisp.get_cookie(request:, name: session_cookie, security: wisp.Signed)
+
+  let assert Ok(True) = {
+    use state <- result.map(list.key_find(query, "state"))
+    let session_id = shared.hashed_string(session_id)
+    crypto.secure_compare(<<session_id:utf8>>, <<state:utf8>>)
+  }
 
   let assert Ok(id_token) = list.key_find(query, "id_token")
   let assert Ok(code) = list.key_find(query, "code")
-  let assert Ok(oauth_state) = store.load(store, auth_key)
+
+  let assert Ok(session.LoginSession(oauth_state)) =
+    store.get(store, session_id)
 
   let assert Ok(keys_request) = request.from_uri(oauth_config.jwks_uri)
 
@@ -188,7 +224,7 @@ fn auth_done_handler(
   let assert Ok(keys) =
     json.parse_bits(keys_response.body, verify_key.set_decoder())
 
-  let assert Ok(#(_name, email)) =
+  let assert Ok(#(name, email)) =
     ywt.decode(jwt: id_token, using: id_token_decoder(), keys:, claims: [
       claim.audience(oauth_config.client_id, []),
       claim.custom("nonce", oauth_state.nonce, json.string, decode.string),
@@ -217,18 +253,15 @@ fn auth_done_handler(
 
   echo #("access_token", access_token)
 
+  session.User(name:, email:, id_token:, access_token:)
+  |> session.UserSession
+  |> store.insert(store, session_id, _)
+
   wisp.redirect("/")
   |> wisp.set_cookie(
     request:,
-    name: auth_cookie,
-    value: "",
-    security: wisp.Signed,
-    max_age: 0,
-  )
-  |> wisp.set_cookie(
-    request:,
-    name: id_cookie,
-    value: email,
+    name: session_cookie,
+    value: session_id,
     security: wisp.Signed,
     max_age: 60 * 60 * 24,
   )
