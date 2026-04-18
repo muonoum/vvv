@@ -38,7 +38,7 @@ fn view(model: Model) -> Element(Message) {
   html.div([attribute.class("flex gap-2 p-4")], [
     html.div([], [element.text(string.inspect(model.user_id))]),
     html.div([], [element.text("—")]),
-    html.a([attribute.class("underline"), attribute.href("/logout")], [
+    html.a([attribute.class("underline"), attribute.href("/auth/logout")], [
       element.text("login"),
     ]),
   ])

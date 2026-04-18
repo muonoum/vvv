@@ -1,12 +1,11 @@
 import envoy
-import gleam/bit_array
-import gleam/crypto
 import gleam/http
 import gleam/http/request.{type Request}
 import gleam/option
 import gleam/result
 import gleam/string
 import gleam/uri.{type Uri, Uri}
+import vvv/shared
 
 pub type Config {
   Config(
@@ -21,11 +20,6 @@ pub type Config {
 
 pub type State {
   State(nonce: String, code_verifier: String)
-}
-
-fn random_string(length: Int) -> String {
-  crypto.strong_random_bytes(length)
-  |> bit_array.base64_url_encode(False)
 }
 
 pub fn from_environment() -> Result(Config, String) {
@@ -63,14 +57,11 @@ pub fn authorize(
   redirect_uri redirect_uri: Uri,
   scope scope: List(String),
 ) -> #(Uri, String, State) {
-  let code_verifier = random_string(32)
-
-  let code_challenge =
-    crypto.hash(crypto.Sha256, <<code_verifier:utf8>>)
-    |> bit_array.base64_url_encode(False)
-
-  let state = random_string(32)
-  let nonce = random_string(32)
+  let key = shared.random_string(32)
+  let state = shared.hashed_string(key)
+  let code_verifier = shared.random_string(32)
+  let code_challenge = shared.hashed_string(code_verifier)
+  let nonce = shared.random_string(32)
 
   let query =
     uri.query_to_string([
@@ -86,7 +77,7 @@ pub fn authorize(
     ])
 
   let uri = Uri(..uri, query: option.Some(query))
-  #(uri, state, State(nonce:, code_verifier:))
+  #(uri, key, State(nonce:, code_verifier:))
 }
 
 pub fn get_token(
