@@ -98,6 +98,8 @@ pub fn get_token(
   code_verifier code_verifier: String,
   code code: String,
 ) -> Result(Request(String), Nil) {
+  use request <- result.try(request.from_uri(uri))
+
   let query =
     uri.query_to_string([
       #("grant_type", "authorization_code"),
@@ -108,8 +110,6 @@ pub fn get_token(
       #("code_verifier", code_verifier),
       #("code", code),
     ])
-
-  use request <- result.try(request.from_uri(uri))
 
   request
   |> request.set_method(http.Post)
