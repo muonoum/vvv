@@ -10,11 +10,7 @@ import vvv/session
 import vvv/store
 
 pub opaque type Model {
-  Model(
-    store: process.Subject(store.Message),
-    session_id: Option(String),
-    user: Option(session.User),
-  )
+  Model(store: process.Subject(store.Message), user: Option(session.User))
 }
 
 pub opaque type Message {
@@ -30,7 +26,7 @@ pub fn component() -> lustre.App(process.Subject(store.Message), Model, Message)
 }
 
 fn init(store: process.Subject(store.Message)) -> #(Model, Effect(Message)) {
-  let model = Model(store:, session_id: option.None, user: option.None)
+  let model = Model(store:, user: option.None)
   #(model, effect.none())
 }
 
@@ -40,13 +36,7 @@ fn update(model: Model, message: Message) -> #(Model, Effect(Message)) {
       let assert Ok(session.UserSession(user)) =
         store.get(model.store, session_id)
 
-      let model =
-        Model(
-          ..model,
-          session_id: option.Some(session_id),
-          user: option.Some(user),
-        )
-
+      let model = Model(..model, user: option.Some(user))
       #(model, effect.none())
     }
   }

@@ -37,6 +37,7 @@ fn on_init(
   component: process.Subject(lustre.RuntimeMessage(message)),
 ) -> #(State(message), Option(process.Selector(server.ClientMessage(message)))) {
   wisp.log_info("Join " <> request.path)
+
   let subject = process.new_subject()
   let selector = process.new_selector() |> process.select(subject)
   process.send(component, server.register_subject(subject))
