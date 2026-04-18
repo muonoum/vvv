@@ -14,8 +14,8 @@ pub type Config {
     client_secret: String,
     redirect_uri: Uri,
     authorize_uri: Uri,
-    jwks_uri: Uri,
     token_uri: Uri,
+    jwks_uri: Uri,
   )
 }
 
@@ -34,7 +34,7 @@ pub fn from_environment() -> Result(Config, String) {
     |> result.replace_error(key)
   }
 
-  let get_and = fn(key, into) {
+  let try = fn(key, into) {
     envoy.get(key)
     |> result.try(into)
     |> result.replace_error(key)
@@ -42,18 +42,18 @@ pub fn from_environment() -> Result(Config, String) {
 
   use client_id <- result.try(get("CLIENT_ID"))
   use client_secret <- result.try(get("CLIENT_SECRET"))
-  use redirect_uri <- result.try(get_and("REDIRECT_URI", uri.parse))
-  use authorize_uri <- result.try(get_and("AUTHORIZE_URI", uri.parse))
-  use jwks_uri <- result.try(get_and("JWKS_URI", uri.parse))
-  use token_uri <- result.try(get_and("TOKEN_URI", uri.parse))
+  use redirect_uri <- result.try(try("REDIRECT_URI", uri.parse))
+  use authorize_uri <- result.try(try("AUTHORIZE_URI", uri.parse))
+  use token_uri <- result.try(try("TOKEN_URI", uri.parse))
+  use jwks_uri <- result.try(try("JWKS_URI", uri.parse))
 
   Ok(Config(
     client_id:,
     client_secret:,
     redirect_uri:,
     authorize_uri:,
-    jwks_uri:,
     token_uri:,
+    jwks_uri:,
   ))
 }
 

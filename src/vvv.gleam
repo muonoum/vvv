@@ -2,7 +2,7 @@ import envoy
 import filepath
 import gleam/erlang/application
 import gleam/erlang/process
-import gleam/function.{identity}
+import gleam/function
 import gleam/int
 import gleam/otp/factory_supervisor as factory
 import gleam/otp/static_supervisor as supervisor
@@ -19,7 +19,6 @@ import wisp/wisp_mist
 pub fn main() -> Nil {
   wisp.configure_logger()
 
-  let assert Ok(priv_directory) = application.priv_directory("vvv")
   let http_address = envoy.get("HTTP_ADDRESS") |> result.unwrap("localhost")
   let assert Ok(http_port) = envoy.get("HTTP_PORT") |> result.try(int.parse)
     as "HTTP_PORT"
@@ -31,7 +30,7 @@ pub fn main() -> Nil {
 
   let assert Ok(oauth_config) = oauth.from_environment()
 
-  let app_component_name = process.new_name("app")
+  let app_name = process.new_name("app")
   let store_name = process.new_name("store")
   let store = process.named_subject(store_name)
 
@@ -40,13 +39,13 @@ pub fn main() -> Nil {
   let app_spec =
     app.component()
     |> lustre.factory
-    |> factory.named(app_component_name)
+    |> factory.named(app_name)
     |> factory.supervised
 
   let server_spec =
-    router.service(_, store, oauth_config, static_handler(priv_directory))
+    router.service(_, store, oauth_config, static_handler())
     |> wisp_mist.handler(secret_key_base)
-    |> router.component_router(app_component_name)
+    |> router.component_router(app_name)
     |> mist.new
     |> mist.bind(http_address)
     |> mist.port(http_port)
@@ -63,9 +62,8 @@ pub fn main() -> Nil {
   process.sleep_forever()
 }
 
-fn static_handler(
-  priv_directory: String,
-) -> fn(wisp.Request, fn() -> wisp.Response) -> wisp.Response {
+fn static_handler() -> fn(wisp.Request, fn() -> wisp.Response) -> wisp.Response {
+  let assert Ok(priv_directory) = application.priv_directory("vvv")
   let app = filepath.join(priv_directory, "static")
 
   let assert Ok(lustre) =
@@ -73,8 +71,8 @@ fn static_handler(
     |> result.map(filepath.join(_, "static"))
     as "lustre/static"
 
-  use request, then <- identity
+  use request, next <- function.identity
   use <- wisp.serve_static(request, under: "/", from: app)
   use <- wisp.serve_static(request, under: "/lustre", from: lustre)
-  then()
+  next()
 }
