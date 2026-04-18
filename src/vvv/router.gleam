@@ -50,9 +50,7 @@ pub fn service(
 
     http.Get, ["auth", "logout"] -> auth_logout_handler(request)
     http.Post, ["auth", "callback"] -> auth_callback_handler(request)
-
-    http.Get, ["auth", "done"] ->
-      auth_done_handler(request, store:, oauth_config:)
+    http.Get, ["auth", "ok"] -> auth_ok_handler(request, store:, oauth_config:)
 
     _method, _segments -> wisp.not_found()
   }
@@ -208,11 +206,11 @@ fn auth_callback_handler(request: wisp.Request) -> wisp.Response {
       #("state", state),
     ])
 
-  let uri = uri.Uri(..uri.empty, path: "/auth/done", query: option.Some(query))
+  let uri = uri.Uri(..uri.empty, path: "/auth/ok", query: option.Some(query))
   wisp.redirect(uri.to_string(uri))
 }
 
-fn auth_done_handler(
+fn auth_ok_handler(
   request: Request(wisp.Connection),
   store store: process.Subject(store.Message),
   oauth_config oauth_config: oauth.Config,
