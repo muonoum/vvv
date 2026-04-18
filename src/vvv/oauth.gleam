@@ -1,15 +1,14 @@
 import gleam/bit_array
-import gleam/bytes_tree.{type BytesTree}
 import gleam/crypto
 import gleam/http
 import gleam/http/request.{type Request}
-import gleam/option.{type Option}
+import gleam/option
 import gleam/result
 import gleam/string
 import gleam/uri.{type Uri, Uri}
 
 pub type State {
-  State(state: String, nonce: String, code_verifier: String)
+  State(nonce: String, code_verifier: String)
 }
 
 fn random_string(length: Int) -> String {
@@ -17,12 +16,12 @@ fn random_string(length: Int) -> String {
   |> bit_array.base64_url_encode(False)
 }
 
-pub fn authorize_uri(
+pub fn authorize(
   uri uri: Uri,
   client_id client_id: String,
   redirect_uri redirect_uri: Uri,
   scope scope: List(String),
-) -> #(Uri, State) {
+) -> #(Uri, String, State) {
   let code_verifier = random_string(32)
 
   let code_challenge =
@@ -46,10 +45,10 @@ pub fn authorize_uri(
     ])
 
   let uri = Uri(..uri, query: option.Some(query))
-  #(uri, State(state:, nonce:, code_verifier:))
+  #(uri, state, State(nonce:, code_verifier:))
 }
 
-pub fn token_request(
+pub fn get_token(
   uri uri: Uri,
   client_id client_id: String,
   client_secret client_secret: String,
@@ -57,7 +56,7 @@ pub fn token_request(
   scope scope: List(String),
   code_verifier code_verifier: String,
   code code: String,
-) -> Result(Request(Option(BytesTree)), Nil) {
+) -> Result(Request(String), Nil) {
   let query =
     uri.query_to_string([
       #("grant_type", "authorization_code"),
@@ -74,6 +73,6 @@ pub fn token_request(
   request
   |> request.set_method(http.Post)
   |> request.set_header("content-type", "application/x-www-form-urlencoded")
-  |> request.set_body(option.Some(bytes_tree.from_string(query)))
+  |> request.set_body(query)
   |> Ok
 }

@@ -22,9 +22,9 @@ pub fn main() -> Nil {
 
   let assert Ok(priv_directory) = application.priv_directory("vvv")
 
-  let http_address = result.unwrap(envoy.get("HTTP_ADDRESS"), "localhost")
+  let http_address = envoy.get("HTTP_ADDRESS") |> result.unwrap("localhost")
 
-  let assert Ok(http_port) = result.try(envoy.get("HTTP_PORT"), int.parse)
+  let assert Ok(http_port) = envoy.get("HTTP_PORT") |> result.try(int.parse)
     as "HTTP_PORT"
 
   let secret_key_base = {
@@ -37,23 +37,17 @@ pub fn main() -> Nil {
   let assert Ok(client_secret) = envoy.get("CLIENT_SECRET") as "CLIENT_SECRET"
 
   let assert Ok(redirect_uri) =
-    envoy.get("REDIRECT_URI")
-    |> result.try(uri.parse)
+    envoy.get("REDIRECT_URI") |> result.try(uri.parse)
     as "REDIRECT_URI"
 
   let assert Ok(authorize_uri) =
-    envoy.get("AUTHORIZE_URI")
-    |> result.try(uri.parse)
+    envoy.get("AUTHORIZE_URI") |> result.try(uri.parse)
     as "AUTHORIZE_URI"
 
-  let assert Ok(jwks_uri) =
-    envoy.get("JWKS_URI")
-    |> result.try(uri.parse)
+  let assert Ok(jwks_uri) = envoy.get("JWKS_URI") |> result.try(uri.parse)
     as "JWKS_URI"
 
-  let assert Ok(token_uri) =
-    envoy.get("TOKEN_URI")
-    |> result.try(uri.parse)
+  let assert Ok(token_uri) = envoy.get("TOKEN_URI") |> result.try(uri.parse)
     as "TOKEN_URI"
 
   let store_name = process.new_name("vvv-store")

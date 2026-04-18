@@ -16,8 +16,8 @@ pub opaque type Model {
 }
 
 pub opaque type Message {
-  Save(subject: process.Subject(Nil), authorize: oauth.State)
-  Load(subject: process.Subject(Result(oauth.State, Nil)), state: String)
+  Save(subject: process.Subject(Nil), key: String, state: oauth.State)
+  Load(subject: process.Subject(Result(oauth.State, Nil)), key: String)
 }
 
 pub fn load(
@@ -27,8 +27,12 @@ pub fn load(
   process.call(store, call_timeout, Load(_, state))
 }
 
-pub fn save(store: process.Subject(Message), authorize: oauth.State) -> Nil {
-  process.call(store, call_timeout, Save(_, authorize))
+pub fn save(
+  store: process.Subject(Message),
+  key: String,
+  state: oauth.State,
+) -> Nil {
+  process.call(store, call_timeout, Save(_, key:, state:))
 }
 
 pub fn start(
@@ -64,19 +68,19 @@ fn update() -> fn(Model, Message) -> actor.Next(Model, Message) {
   use model: Model, message: Message <- function.identity
 
   case message {
-    Save(subject:, authorize:) -> {
+    Save(subject:, key:, state:) -> {
       process.send(subject, Nil)
 
-      dict.insert(model.state, authorize.state, authorize)
+      dict.insert(model.state, key, state)
       |> Model(state: _)
       |> actor.continue
     }
 
-    Load(subject:, state:) -> {
-      dict.get(model.state, state)
+    Load(subject:, key:) -> {
+      dict.get(model.state, key)
       |> process.send(subject, _)
 
-      dict.delete(model.state, state)
+      dict.delete(model.state, key)
       |> Model(state: _)
       |> actor.continue
     }
