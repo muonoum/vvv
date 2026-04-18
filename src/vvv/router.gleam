@@ -107,6 +107,7 @@ fn create_session(
   store store: process.Subject(store.Message),
   session_id session_id: String,
   value value: session.Session,
+  max_age max_age: Int,
 ) -> wisp.Response {
   store.insert(store, session_id, value)
 
@@ -116,7 +117,7 @@ fn create_session(
     name: session_cookie,
     value: session_id,
     security: wisp.Signed,
-    max_age: 30,
+    max_age:,
   )
 }
 
@@ -169,17 +170,14 @@ fn auth_login_handler(
       scope: ["openid", "profile", "email"],
     )
 
-  session.LoginSession(oauth_state)
-  |> store.insert(store, session_id, _)
-
   uri.to_string(authorize_uri)
   |> wisp.redirect
-  |> wisp.set_cookie(
+  |> create_session(
     request:,
-    name: session_cookie,
-    value: session_id,
-    security: wisp.Signed,
+    store:,
+    session_id:,
     max_age: 30,
+    value: session.LoginSession(oauth_state),
   )
 }
 
@@ -273,6 +271,7 @@ fn auth_ok_handler(
     request:,
     store:,
     session_id:,
+    max_age: 60 * 60 * 24,
     value: session.User(name:, email:, id_token:, access_token:)
       |> session.UserSession,
   )
