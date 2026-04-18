@@ -16,8 +16,8 @@ import gleam/uri
 import lustre/element
 import mist
 import vvv/component
-import vvv/extra/httpc
 import vvv/frontend
+import vvv/httpc
 import vvv/oauth
 import vvv/store
 import wisp

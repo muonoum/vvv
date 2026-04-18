@@ -9,7 +9,7 @@ import gleam/otp/static_supervisor as supervisor
 import gleam/result
 import lustre
 import mist
-import vvv/components/app
+import vvv/app
 import vvv/oauth
 import vvv/router
 import vvv/store
