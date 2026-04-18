@@ -174,13 +174,7 @@ fn callback_handler(request: wisp.Request, config: Config) -> wisp.Response {
   }
 
   let assert Ok(#(access_token, _, _, _)) =
-    json.parse_bits(token_response.body, {
-      use access_token <- decode.field("access_token", decode.string)
-      use scope <- decode.field("scope", decode.string)
-      use expires_in <- decode.field("expires_in", decode.int)
-      use token_type <- decode.field("token_type", decode.string)
-      decode.success(#(access_token, scope, expires_in, token_type))
-    })
+    json.parse_bits(token_response.body, access_token_decoder())
 
   echo #("access_token", access_token)
 
@@ -198,4 +192,12 @@ fn id_token_decoder() -> Decoder(#(String, String)) {
   use name <- decode.field("name", decode.string)
   use email <- decode.field("email", decode.string)
   decode.success(#(name, email))
+}
+
+fn access_token_decoder() -> Decoder(#(String, String, Int, String)) {
+  use access_token <- decode.field("access_token", decode.string)
+  use scope <- decode.field("scope", decode.string)
+  use expires_in <- decode.field("expires_in", decode.int)
+  use token_type <- decode.field("token_type", decode.string)
+  decode.success(#(access_token, scope, expires_in, token_type))
 }
