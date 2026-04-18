@@ -103,6 +103,25 @@ fn render_page(session_id: Option(String), csp_nonce: String) -> wisp.Response {
   )
 }
 
+fn create_session(
+  response: wisp.Response,
+  request request: wisp.Request,
+  store store: process.Subject(store.Message),
+  session_id session_id: String,
+  value value: session.Session,
+) -> wisp.Response {
+  store.insert(store, session_id, value)
+
+  response
+  |> wisp.set_cookie(
+    request:,
+    name: session_cookie,
+    value: session_id,
+    security: wisp.Signed,
+    max_age: 30,
+  )
+}
+
 fn delete_session(
   response: wisp.Response,
   request: wisp.Request,
@@ -251,19 +270,13 @@ fn auth_done_handler(
   let assert Ok(#(access_token, _, _, _)) =
     json.parse_bits(token_response.body, access_token_decoder())
 
-  echo #("access_token", access_token)
-
-  session.User(name:, email:, id_token:, access_token:)
-  |> session.UserSession
-  |> store.insert(store, session_id, _)
-
   wisp.redirect("/")
-  |> wisp.set_cookie(
+  |> create_session(
     request:,
-    name: session_cookie,
-    value: session_id,
-    security: wisp.Signed,
-    max_age: 60 * 60 * 24,
+    store:,
+    session_id:,
+    value: session.User(name:, email:, id_token:, access_token:)
+      |> session.UserSession,
   )
 }
 
