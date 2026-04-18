@@ -1,5 +1,6 @@
 import gleam/bytes_tree
 import gleam/dynamic/decode.{type Decoder}
+import gleam/erlang/process
 import gleam/function.{identity}
 import gleam/http
 import gleam/http/request.{type Request}
@@ -15,7 +16,6 @@ import gleam/uri
 import lustre/element
 import mist
 import vvv/component
-import vvv/config.{type Config}
 import vvv/extra/httpc
 import vvv/frontend
 import vvv/oauth
@@ -29,7 +29,8 @@ const id_cookie = "vvv-id"
 
 pub fn service(
   request: wisp.Request,
-  config: Config,
+  store: process.Subject(store.Message),
+  oauth_config: oauth.Config,
   serve_static: fn(wisp.Request, fn() -> wisp.Response) -> wisp.Response,
 ) -> wisp.Response {
   use <- wisp.rescue_crashes
@@ -41,7 +42,7 @@ pub fn service(
   case request.method, wisp.path_segments(request) {
     http.Get, [] -> {
       use request <- wisp.csrf_known_header_protection(request)
-      top_handler(request, config, csp_nonce)
+      top_handler(request, store, oauth_config, csp_nonce)
     }
 
     http.Get, ["logout"] -> {
@@ -49,7 +50,7 @@ pub fn service(
       logout_handler(request)
     }
 
-    http.Post, ["callback"] -> callback_handler(request, config)
+    http.Post, ["callback"] -> callback_handler(request, store, oauth_config)
     _method, _segments -> wisp.not_found()
   }
 }
@@ -89,7 +90,8 @@ fn component_service(
 
 fn top_handler(
   request: wisp.Request,
-  config: Config,
+  store: process.Subject(store.Message),
+  oauth_config: oauth.Config,
   csp_nonce: String,
 ) -> wisp.Response {
   case wisp.get_cookie(request, id_cookie, wisp.Signed) {
@@ -103,13 +105,13 @@ fn top_handler(
     Error(Nil) -> {
       let #(uri, key, state) =
         oauth.authorize(
-          uri: config.authorize_uri,
-          client_id: config.client_id,
-          redirect_uri: config.redirect_uri,
+          uri: oauth_config.authorize_uri,
+          client_id: oauth_config.client_id,
+          redirect_uri: oauth_config.redirect_uri,
           scope: ["openid", "profile", "email"],
         )
 
-      store.save(config.store, key, state)
+      store.save(store, key, state)
       wisp.redirect(uri.to_string(uri))
     }
   }
@@ -131,7 +133,11 @@ fn logout_handler(request: wisp.Request) -> wisp.Response {
   }
 }
 
-fn callback_handler(request: wisp.Request, config: Config) -> wisp.Response {
+fn callback_handler(
+  request: wisp.Request,
+  store: process.Subject(store.Message),
+  oauth_config: oauth.Config,
+) -> wisp.Response {
   use form_data <- wisp.require_form(request)
 
   let assert Ok(code) = list.key_find(form_data.values, "code")
@@ -139,9 +145,9 @@ fn callback_handler(request: wisp.Request, config: Config) -> wisp.Response {
 
   let assert Ok(state) =
     list.key_find(form_data.values, "state")
-    |> result.try(store.load(config.store, _))
+    |> result.try(store.load(store, _))
 
-  let assert Ok(keys_request) = request.from_uri(config.jwks_uri)
+  let assert Ok(keys_request) = request.from_uri(oauth_config.jwks_uri)
 
   let assert Ok(keys_response) =
     httpc.send(request.set_body(keys_request, option.None), [])
@@ -151,16 +157,16 @@ fn callback_handler(request: wisp.Request, config: Config) -> wisp.Response {
 
   let assert Ok(#(_name, email)) =
     ywt.decode(jwt: id_token, using: id_token_decoder(), keys:, claims: [
-      claim.audience(config.client_id, []),
+      claim.audience(oauth_config.client_id, []),
       claim.custom("nonce", state.nonce, json.string, decode.string),
     ])
 
   let assert Ok(token_request) =
     oauth.get_token(
-      uri: config.token_uri,
-      client_id: config.client_id,
-      client_secret: config.client_secret,
-      redirect_uri: config.redirect_uri,
+      uri: oauth_config.token_uri,
+      client_id: oauth_config.client_id,
+      client_secret: oauth_config.client_secret,
+      redirect_uri: oauth_config.redirect_uri,
       scope: ["openid", "profile", "email"],
       code_verifier: state.code_verifier,
       code:,

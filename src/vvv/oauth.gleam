@@ -1,3 +1,4 @@
+import envoy
 import gleam/bit_array
 import gleam/crypto
 import gleam/http
@@ -7,6 +8,17 @@ import gleam/result
 import gleam/string
 import gleam/uri.{type Uri, Uri}
 
+pub type Config {
+  Config(
+    client_id: String,
+    client_secret: String,
+    redirect_uri: Uri,
+    authorize_uri: Uri,
+    jwks_uri: Uri,
+    token_uri: Uri,
+  )
+}
+
 pub type State {
   State(nonce: String, code_verifier: String)
 }
@@ -14,6 +26,35 @@ pub type State {
 fn random_string(length: Int) -> String {
   crypto.strong_random_bytes(length)
   |> bit_array.base64_url_encode(False)
+}
+
+pub fn from_environment() -> Result(Config, String) {
+  let get = fn(key) {
+    envoy.get(key)
+    |> result.replace_error(key)
+  }
+
+  let get_and = fn(key, into) {
+    envoy.get(key)
+    |> result.try(into)
+    |> result.replace_error(key)
+  }
+
+  use client_id <- result.try(get("CLIENT_ID"))
+  use client_secret <- result.try(get("CLIENT_SECRET"))
+  use redirect_uri <- result.try(get_and("REDIRECT_URI", uri.parse))
+  use authorize_uri <- result.try(get_and("AUTHORIZE_URI", uri.parse))
+  use jwks_uri <- result.try(get_and("JWKS_URI", uri.parse))
+  use token_uri <- result.try(get_and("TOKEN_URI", uri.parse))
+
+  Ok(Config(
+    client_id:,
+    client_secret:,
+    redirect_uri:,
+    authorize_uri:,
+    jwks_uri:,
+    token_uri:,
+  ))
 }
 
 pub fn authorize(
