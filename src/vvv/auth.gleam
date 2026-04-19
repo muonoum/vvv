@@ -32,9 +32,9 @@ pub type Config {
     authorize_uri: Uri,
     token_uri: Uri,
     jwks_uri: Uri,
-    scope: String,
     response_mode: String,
     response_type: String,
+    scope: String,
   )
 }
 
@@ -65,9 +65,9 @@ pub fn configure_from_environment() -> Result(Config, String) {
   use authorize_uri <- result.try(try("AUTHORIZE_URI", uri.parse))
   use token_uri <- result.try(try("TOKEN_URI", uri.parse))
   use jwks_uri <- result.try(try("JWKS_URI", uri.parse))
-  use scope <- result.try(get("SCOPE"))
   use response_mode <- result.try(get("RESPONSE_MODE"))
   use response_type <- result.try(get("RESPONSE_TYPE"))
+  use scope <- result.try(get("SCOPE"))
 
   Ok(Config(
     client_id:,
@@ -76,9 +76,9 @@ pub fn configure_from_environment() -> Result(Config, String) {
     authorize_uri:,
     token_uri:,
     jwks_uri:,
-    scope:,
     response_mode:,
     response_type:,
+    scope:,
   ))
 }
 
@@ -91,7 +91,6 @@ fn authorize(config: Config) -> #(Uri, String, State) {
 
   let query =
     uri.query_to_string([
-      // TODO: Config?
       #("response_type", config.response_type),
       #("client_id", config.client_id),
       #("redirect_uri", uri.to_string(config.redirect_uri)),
