@@ -195,7 +195,7 @@ pub fn router(
 //   |> result.map(fn(uri) { uri.path })
 // }
 
-pub fn login_handler(
+fn login_handler(
   request: wisp.Request,
   return_path return_path: String,
   auth_config auth_config: Config,
@@ -216,25 +216,25 @@ pub fn login_handler(
   )
 }
 
-pub fn logout_handler(request: wisp.Request) -> wisp.Response {
+fn logout_handler(request: wisp.Request) -> wisp.Response {
   case wisp.get_cookie(request, cookie_name, wisp.Signed) {
     Error(Nil) -> wisp.redirect("/")
     Ok(..) -> wisp.redirect("/") |> delete_session(request)
   }
 }
 
-pub fn query_response(
-  request: Request(wisp.Connection),
-  next: fn(String, String, Option(String)) -> wisp.Response,
-) -> wisp.Response {
-  let query = wisp.get_query(request)
-  let assert Ok(id_token) = list.key_find(query, "id_token")
-  let assert Ok(state) = list.key_find(query, "state")
-  let code = list.key_find(query, "code") |> option.from_result
-  next(id_token, state, code)
-}
+// fn query_response(
+//   request: Request(wisp.Connection),
+//   next: fn(String, String, Option(String)) -> wisp.Response,
+// ) -> wisp.Response {
+//   let query = wisp.get_query(request)
+//   let assert Ok(id_token) = list.key_find(query, "id_token")
+//   let assert Ok(state) = list.key_find(query, "state")
+//   let code = list.key_find(query, "code") |> option.from_result
+//   next(id_token, state, code)
+// }
 
-pub fn form_post_response(
+fn form_post_response(
   request: Request(wisp.Connection),
   next: fn(String, String, Option(String)) -> wisp.Response,
 ) -> wisp.Response {
@@ -245,7 +245,7 @@ pub fn form_post_response(
   next(id_token, state, code)
 }
 
-pub fn callback_handler(
+fn callback_handler(
   id_token: String,
   state: String,
   code: Option(String),
@@ -262,7 +262,7 @@ pub fn callback_handler(
   wisp.redirect(uri.to_string(uri))
 }
 
-pub fn ok_handler(
+fn ok_handler(
   request: wisp.Request,
   auth_config auth_config: Config,
 ) -> wisp.Response {
