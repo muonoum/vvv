@@ -176,14 +176,7 @@ fn delete_session(
   response: wisp.Response,
   request: wisp.Request,
 ) -> wisp.Response {
-  response
-  |> wisp.set_cookie(
-    request:,
-    name: session_cookie,
-    value: "",
-    security: wisp.Signed,
-    max_age: 0,
-  )
+  create_session(response, request:, value: json.null(), max_age: 0)
 }
 
 fn login_handler(
@@ -214,18 +207,20 @@ fn logout_handler(request: wisp.Request) -> wisp.Response {
   }
 }
 
-// fn query_response(
-//   request: Request(wisp.Connection),
-//   next: fn(String, String, Option(String)) -> wisp.Response,
-// ) -> wisp.Response {
-//   let query = wisp.get_query(request)
-//   let assert Ok(id_token) = list.key_find(query, "id_token")
-//   let assert Ok(state) = list.key_find(query, "state")
-//   let code = list.key_find(query, "code") |> option.from_result
-//   next(id_token, state, code)
-// }
+@internal
+pub fn query_response(
+  request: Request(wisp.Connection),
+  next: fn(String, String, Option(String)) -> wisp.Response,
+) -> wisp.Response {
+  let query = wisp.get_query(request)
+  let assert Ok(id_token) = list.key_find(query, "id_token")
+  let assert Ok(state) = list.key_find(query, "state")
+  let code = list.key_find(query, "code") |> option.from_result
+  next(id_token, state, code)
+}
 
-fn form_post_response(
+@internal
+pub fn form_post_response(
   request: Request(wisp.Connection),
   next: fn(String, String, Option(String)) -> wisp.Response,
 ) -> wisp.Response {
