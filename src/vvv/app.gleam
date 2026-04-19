@@ -4,19 +4,19 @@ import lustre/attribute
 import lustre/effect.{type Effect}
 import lustre/element.{type Element}
 import lustre/element/html
-import vvv/session
+import vvv/auth
 
 pub opaque type Model {
-  Model(user: Option(session.User))
+  Model(user: Option(auth.User))
 }
 
 pub type Message
 
-pub fn component() -> lustre.App(Option(session.User), Model, Message) {
+pub fn component() -> lustre.App(Option(auth.User), Model, Message) {
   lustre.component(init, update, view, options: [])
 }
 
-fn init(user: Option(session.User)) -> #(Model, Effect(Message)) {
+fn init(user: Option(auth.User)) -> #(Model, Effect(Message)) {
   #(Model(user:), effect.none())
 }
 
