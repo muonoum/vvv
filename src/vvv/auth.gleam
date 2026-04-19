@@ -32,7 +32,9 @@ pub type Config {
     authorize_uri: Uri,
     token_uri: Uri,
     jwks_uri: Uri,
-    scope: List(String),
+    scope: String,
+    response_mode: String,
+    response_type: String,
   )
 }
 
@@ -51,18 +53,15 @@ pub fn configure_from_environment() -> Result(Config, String) {
     |> result.replace_error(key)
   }
 
-  let map = fn(key, into) {
-    result.map(envoy.get(key), into)
-    |> result.replace_error(key)
-  }
-
   use client_id <- result.try(get("CLIENT_ID"))
   use client_secret <- result.try(get("CLIENT_SECRET"))
   use redirect_uri <- result.try(try("REDIRECT_URI", uri.parse))
   use authorize_uri <- result.try(try("AUTHORIZE_URI", uri.parse))
   use token_uri <- result.try(try("TOKEN_URI", uri.parse))
   use jwks_uri <- result.try(try("JWKS_URI", uri.parse))
-  use scope <- result.try(map("SCOPE", string.split(_, ",")))
+  use scope <- result.try(get("SCOPE"))
+  use response_mode <- result.try(get("RESPONSE_MODE"))
+  use response_type <- result.try(get("RESPONSE_TYPE"))
 
   Ok(Config(
     client_id:,
@@ -72,15 +71,12 @@ pub fn configure_from_environment() -> Result(Config, String) {
     token_uri:,
     jwks_uri:,
     scope:,
+    response_mode:,
+    response_type:,
   ))
 }
 
-fn authorize(
-  uri uri: Uri,
-  client_id client_id: String,
-  redirect_uri redirect_uri: Uri,
-  scope scope: List(String),
-) -> #(Uri, String, State) {
+fn authorize(config: Config) -> #(Uri, String, State) {
   let key = shared.random_string(32)
   let state = shared.hashed_string(key)
   let code_verifier = shared.random_string(32)
@@ -90,40 +86,35 @@ fn authorize(
   let query =
     uri.query_to_string([
       // TODO: Config?
-      // #("response_type", "code id_token"),
-      #("response_type", "id_token"),
-      #("client_id", client_id),
-      #("redirect_uri", uri.to_string(redirect_uri)),
-      #("response_mode", "form_post"),
-      #("scope", string.join(scope, " ")),
+      #("response_type", config.response_type),
+      #("client_id", config.client_id),
+      #("redirect_uri", uri.to_string(config.redirect_uri)),
+      #("response_mode", config.response_mode),
+      #("scope", config.scope),
       #("code_challenge_method", "S256"),
       #("code_challenge", code_challenge),
       #("state", state),
       #("nonce", nonce),
     ])
 
-  let uri = Uri(..uri, query: option.Some(query))
+  let uri = Uri(..config.authorize_uri, query: option.Some(query))
   #(uri, key, State(nonce:, code_verifier:))
 }
 
 fn get_token(
-  uri uri: Uri,
-  client_id client_id: String,
-  client_secret client_secret: String,
-  redirect_uri redirect_uri: Uri,
-  scope scope: List(String),
+  config: Config,
   code_verifier code_verifier: String,
   code code: String,
 ) -> Result(Request(String), Nil) {
-  use request <- result.try(request.from_uri(uri))
+  use request <- result.try(request.from_uri(config.token_uri))
 
   let query =
     uri.query_to_string([
       #("grant_type", "authorization_code"),
-      #("client_id", client_id),
-      #("client_secret", client_secret),
-      #("scope", string.join(scope, " ")),
-      #("redirect_uri", uri.to_string(redirect_uri)),
+      #("client_id", config.client_id),
+      #("client_secret", config.client_secret),
+      #("scope", config.scope),
+      #("redirect_uri", uri.to_string(config.redirect_uri)),
       #("code_verifier", code_verifier),
       #("code", code),
     ])
@@ -169,13 +160,7 @@ pub fn login_handler(
   request: wisp.Request,
   oauth_config oauth_config: Config,
 ) -> wisp.Response {
-  let #(authorize_uri, session_id, oauth_state) =
-    authorize(
-      uri: oauth_config.authorize_uri,
-      client_id: oauth_config.client_id,
-      redirect_uri: oauth_config.redirect_uri,
-      scope: oauth_config.scope,
-    )
+  let #(authorize_uri, session_id, oauth_state) = authorize(oauth_config)
 
   uri.to_string(authorize_uri)
   |> wisp.redirect
@@ -313,15 +298,7 @@ pub fn ok_handler(
 
     Ok(code) -> {
       let assert Ok(token_request) =
-        get_token(
-          uri: oauth_config.token_uri,
-          client_id: oauth_config.client_id,
-          client_secret: oauth_config.client_secret,
-          redirect_uri: oauth_config.redirect_uri,
-          scope: oauth_config.scope,
-          code_verifier: oauth_state.code_verifier,
-          code:,
-        )
+        get_token(oauth_config, code_verifier: oauth_state.code_verifier, code:)
 
       let assert Ok(token_response) = {
         token_request
