@@ -21,13 +21,13 @@ pub fn service(
 ) -> wisp.Response {
   use <- wisp.rescue_crashes
   use request <- wisp.handle_head(request)
-  use csp_nonce <- wisp.content_security_policy_protection()
   use <- serve_static(request)
   use <- wisp.log_request(request)
   use <- auth.service(request, auth_config:, prefix: "auth")
+  use csp_nonce <- wisp.content_security_policy_protection()
 
   case request.method, wisp.path_segments(request) {
-    http.Get, [] -> page_handler(request, csrf_token: "TODO", csp_nonce:)
+    http.Get, [] -> page_handler(request, csp_nonce:, csrf_token: "TODO")
     _method, _segments -> wisp.not_found()
   }
 }
