@@ -18,7 +18,7 @@ import ywt
 import ywt/claim
 import ywt/verify_key
 
-pub const cookie_name = "vvv-session"
+pub const session_cookie = "vvv-session"
 
 pub type User {
   User(name: String, email: String)
@@ -165,7 +165,7 @@ fn create_session(
   response
   |> wisp.set_cookie(
     request:,
-    name: cookie_name,
+    name: session_cookie,
     value: json.to_string(value),
     security: wisp.Signed,
     max_age:,
@@ -179,7 +179,7 @@ fn delete_session(
   response
   |> wisp.set_cookie(
     request:,
-    name: cookie_name,
+    name: session_cookie,
     value: "",
     security: wisp.Signed,
     max_age: 0,
@@ -208,7 +208,7 @@ fn login_handler(
 }
 
 fn logout_handler(request: wisp.Request) -> wisp.Response {
-  case wisp.get_cookie(request, cookie_name, wisp.Signed) {
+  case wisp.get_cookie(request, session_cookie, wisp.Signed) {
     Error(Nil) -> wisp.redirect("/")
     Ok(..) -> wisp.redirect("/") |> delete_session(request)
   }
@@ -263,7 +263,7 @@ fn ok_handler(request: wisp.Request, config config: Config) -> wisp.Response {
   //
 
   let assert Ok(session) =
-    wisp.get_cookie(request:, name: cookie_name, security: wisp.Signed)
+    wisp.get_cookie(request:, name: session_cookie, security: wisp.Signed)
 
   let assert Ok(#(session_id, return_path, oauth_state)) =
     json.parse(session, login_session_decoder())

@@ -54,7 +54,7 @@ pub fn component_router(
 
 fn get_user(request: Request(_), secret_key_base: String) -> Option(auth.User) {
   request.get_cookies(request)
-  |> list.key_find(auth.cookie_name)
+  |> list.key_find(auth.session_cookie)
   |> result.try(crypto.verify_signed_message(_, <<secret_key_base:utf8>>))
   |> result.try(bit_array.to_string)
   |> option.from_result
