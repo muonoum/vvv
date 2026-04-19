@@ -258,6 +258,12 @@ pub fn ok_handler(
     |> result.unwrap(keys_response.body)
     |> json.parse_bits(verify_key.set_decoder())
 
+  // let _ =
+  //   echo ywt.decode(jwt: id_token, using: decode.dynamic, keys:, claims: [
+  //     claim.audience(oauth_config.client_id, []),
+  //     claim.custom("nonce", oauth_state.nonce, json.string, decode.string),
+  //   ])
+
   let assert Ok(#(name, email)) =
     ywt.decode(jwt: id_token, using: id_token_decoder(), keys:, claims: [
       claim.audience(oauth_config.client_id, []),
