@@ -24,17 +24,13 @@ pub fn service(
   use csp_nonce <- wisp.content_security_policy_protection()
   use <- serve_static(request)
   use <- wisp.log_request(request)
+  use <- auth.router(request, auth_config)
 
   case request.method, wisp.path_segments(request) {
-    http.Get, [] -> page_handler(request, csrf_token: "TODO", csp_nonce:)
-
-    http.Get, ["auth", "login"] -> auth.login_handler(request, auth_config:)
-    http.Get, ["auth", "logout"] -> auth.logout_handler(request)
-
-    http.Post, ["auth", "callback"] ->
-      auth.form_post_response(request, auth.callback_handler)
-
-    http.Get, ["auth", "ok"] -> auth.ok_handler(request, auth_config:)
+    http.Get, [] | http.Get, ["other"] -> {
+      use request <- wisp.csrf_known_header_protection(request)
+      page_handler(request, csrf_token: "TODO", csp_nonce:)
+    }
 
     _method, _segments -> wisp.not_found()
   }
@@ -71,12 +67,10 @@ fn get_user(request: Request(_), secret_key_base: String) -> Option(auth.User) {
 }
 
 fn page_handler(
-  request: wisp.Request,
+  _request: wisp.Request,
   csrf_token csrf_token: String,
   csp_nonce csp_nonce: String,
 ) -> wisp.Response {
-  use _request <- wisp.csrf_known_header_protection(request)
-
   wisp.ok()
   |> wisp.html_body(
     element.to_document_string(frontend.page(

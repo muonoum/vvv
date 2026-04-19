@@ -39,6 +39,10 @@ fn view(model: Model) -> Element(Message) {
         [attribute.class("bg-emerald-300 px-2"), attribute.href("/auth/login")],
         [element.text("login")],
       ),
+      html.a(
+        [attribute.class("bg-emerald-300 px-2"), attribute.href("/other")],
+        [element.text("other")],
+      ),
     ]
   })
 }

@@ -164,8 +164,45 @@ fn delete_session(
   )
 }
 
+pub fn router(
+  request: wisp.Request,
+  auth_config: Config,
+  next: fn() -> wisp.Response,
+) -> wisp.Response {
+  case request.method, wisp.path_segments(request) {
+    http.Get, ["auth", "login"] -> {
+      use request <- wisp.csrf_known_header_protection(request)
+      let return_path = get_return_path(request)
+      login_handler(request, return_path:, auth_config:)
+    }
+
+    http.Get, ["auth", "logout"] -> {
+      use request <- wisp.csrf_known_header_protection(request)
+      logout_handler(request)
+    }
+
+    http.Post, ["auth", "callback"] ->
+      form_post_response(request, callback_handler)
+
+    http.Get, ["auth", "ok"] -> {
+      use request <- wisp.csrf_known_header_protection(request)
+      ok_handler(request, auth_config:)
+    }
+
+    _method, _segments -> next()
+  }
+}
+
+fn get_return_path(request: Request(_)) -> String {
+  request.get_header(request, "referer")
+  |> result.try(uri.parse)
+  |> result.map(fn(uri) { uri.path })
+  |> result.unwrap("/")
+}
+
 pub fn login_handler(
   request: wisp.Request,
+  return_path return_path: String,
   auth_config auth_config: Config,
 ) -> wisp.Response {
   let #(authorize_uri, session_id, oauth_state) = authorize(auth_config)
@@ -179,13 +216,12 @@ pub fn login_handler(
       #("session_id", json.string(session_id)),
       #("nonce", json.string(oauth_state.nonce)),
       #("code_verifier", json.string(oauth_state.code_verifier)),
+      #("return_path", json.string(return_path)),
     ]),
   )
 }
 
 pub fn logout_handler(request: wisp.Request) -> wisp.Response {
-  use request <- wisp.csrf_known_header_protection(request)
-
   case wisp.get_cookie(request, cookie_name, wisp.Signed) {
     Error(Nil) -> wisp.redirect("/")
     Ok(..) -> wisp.redirect("/") |> delete_session(request)
@@ -237,7 +273,6 @@ pub fn ok_handler(
 ) -> wisp.Response {
   // TODO: Feilhåndtering
 
-  use request <- wisp.csrf_known_header_protection(request)
   let assert Ok(query) = request.get_query(request)
 
   //
@@ -247,12 +282,13 @@ pub fn ok_handler(
   let assert Ok(session) =
     wisp.get_cookie(request:, name: cookie_name, security: wisp.Signed)
 
-  let assert Ok(#(session_id, oauth_state)) =
+  let assert Ok(#(session_id, return_path, oauth_state)) =
     json.parse(session, {
       use session_id <- decode.field("session_id", decode.string)
       use nonce <- decode.field("nonce", decode.string)
       use code_verifier <- decode.field("code_verifier", decode.string)
-      decode.success(#(session_id, State(nonce:, code_verifier:)))
+      use return_path <- decode.field("return_path", decode.string)
+      decode.success(#(session_id, return_path, State(nonce:, code_verifier:)))
     })
 
   //
@@ -330,7 +366,7 @@ pub fn ok_handler(
   // Return
   //
 
-  wisp.redirect("/")
+  wisp.redirect(return_path)
   |> create_session(
     request:,
     max_age: 60 * 60 * 24,
