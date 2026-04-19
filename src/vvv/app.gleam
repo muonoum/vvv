@@ -25,25 +25,20 @@ fn update(model: Model, _message: Message) -> #(Model, Effect(Message)) {
 }
 
 fn view(model: Model) -> Element(Message) {
-  case model.user {
-    option.Some(user) ->
-      html.div([attribute.class("flex gap-4 p-4")], [
-        html.a(
-          [attribute.class("bg-rose-300 px-2"), attribute.href("/auth/logout")],
-          [element.text("logout")],
-        ),
-        html.div([], [element.text(user.name <> "—" <> user.email)]),
-      ])
+  html.div([attribute.class("flex gap-2 p-4")], case model.user {
+    option.Some(user) -> [
+      html.a(
+        [attribute.class("bg-rose-300 px-2"), attribute.href("/auth/logout")],
+        [element.text("logout")],
+      ),
+      html.div([], [element.text(user.name <> "—" <> user.email)]),
+    ]
 
-    option.None ->
-      html.div([attribute.class("flex gap-2 p-4")], [
-        html.a(
-          [
-            attribute.class("bg-emerald-300 px-2"),
-            attribute.href("/auth/login"),
-          ],
-          [element.text("login")],
-        ),
-      ])
-  }
+    option.None -> [
+      html.a(
+        [attribute.class("bg-emerald-300 px-2"), attribute.href("/auth/login")],
+        [element.text("login")],
+      ),
+    ]
+  })
 }
