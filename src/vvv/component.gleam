@@ -1,8 +1,10 @@
+import gleam/bytes_tree
 import gleam/erlang/process
 import gleam/http/request.{type Request}
 import gleam/http/response.{type Response}
 import gleam/json
 import gleam/option.{type Option, Some}
+import gleam/otp/actor
 import gleam/otp/factory_supervisor as factory
 import gleam/string
 import lustre
@@ -14,6 +16,26 @@ pub type Name(argument, message) =
   process.Name(
     factory.Message(argument, process.Subject(lustre.RuntimeMessage(message))),
   )
+
+pub fn start(
+  request: Request(mist.Connection),
+  name: Name(argument, message),
+  argument: argument,
+) -> Response(mist.ResponseData) {
+  let supervisor = factory.get_by_name(name)
+
+  case factory.start_child(supervisor, argument) {
+    Ok(actor.Started(pid: _, data: component)) -> service(request, component)
+
+    Error(error) -> {
+      let message = ["Server component", request.path, string.inspect(error)]
+      wisp.log_error(string.join(message, ": "))
+
+      response.new(500)
+      |> response.set_body(mist.Bytes(bytes_tree.new()))
+    }
+  }
+}
 
 pub fn service(
   request: Request(mist.Connection),

@@ -10,7 +10,7 @@ import gleam/result
 import lustre
 import mist
 import vvv/app
-import vvv/oauth
+import vvv/auth
 import vvv/router
 import vvv/store
 import wisp
@@ -28,7 +28,7 @@ pub fn main() -> Nil {
     wisp.random_string(64)
   }
 
-  let assert Ok(oauth_config) = oauth.from_environment()
+  let assert Ok(oauth_config) = auth.configure_from_environment()
 
   let app_name = process.new_name("app")
   let store_name = process.new_name("store")
@@ -45,7 +45,7 @@ pub fn main() -> Nil {
   let server_spec =
     router.service(_, store, oauth_config, static_handler())
     |> wisp_mist.handler(secret_key_base)
-    |> router.component_router(store, app_name)
+    |> router.component_router(secret_key_base, store, app_name)
     |> mist.new
     |> mist.bind(http_address)
     |> mist.port(http_port)
