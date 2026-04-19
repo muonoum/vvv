@@ -164,30 +164,66 @@ fn delete_session(
   )
 }
 
-pub fn router(
+pub fn service(
   request: wisp.Request,
-  auth_config: Config,
-  next: fn() -> wisp.Response,
+  auth_config auth_config: Config,
+  prefix prefix: String,
+  next next: fn() -> wisp.Response,
 ) -> wisp.Response {
-  case request.method, wisp.path_segments(request) {
-    http.Get, ["auth", "login"] -> {
-      let return_path =
-        wisp.get_query(request)
-        |> list.key_find("return_path")
-        |> result.unwrap("/")
+  case wisp.path_segments(request) {
+    [first, ..segments] if first == prefix ->
+      router(request, auth_config:, segments:)
 
-      login_handler(request, return_path:, auth_config:)
-    }
-
-    http.Get, ["auth", "logout"] -> logout_handler(request)
-
-    http.Post, ["auth", "callback"] ->
-      form_post_response(request, callback_handler)
-
-    http.Get, ["auth", "ok"] -> ok_handler(request, auth_config:)
-    _method, _segments -> next()
+    _segments -> next()
   }
 }
+
+fn router(
+  request: wisp.Request,
+  auth_config auth_config: Config,
+  segments segments: List(String),
+) -> wisp.Response {
+  case request.method, segments {
+    http.Get, ["login"] ->
+      login_handler(
+        request,
+        auth_config:,
+        return_path: wisp.get_query(request)
+          |> list.key_find("return_path")
+          |> result.unwrap("/"),
+      )
+
+    http.Get, ["logout"] -> logout_handler(request)
+    http.Post, ["callback"] -> form_post_response(request, callback_handler)
+    http.Get, ["ok"] -> ok_handler(request, auth_config:)
+    _method, _segments -> wisp.not_found()
+  }
+}
+
+// pub fn router(
+//   request: wisp.Request,
+//   auth_config: Config,
+//   next: fn() -> wisp.Response,
+// ) -> wisp.Response {
+//   case request.method, wisp.path_segments(request) {
+//     http.Get, ["auth", "login"] -> {
+//       let return_path =
+//         wisp.get_query(request)
+//         |> list.key_find("return_path")
+//         |> result.unwrap("/")
+
+//       login_handler(request, return_path:, auth_config:)
+//     }
+
+//     http.Get, ["auth", "logout"] -> logout_handler(request)
+
+//     http.Post, ["auth", "callback"] ->
+//       form_post_response(request, callback_handler)
+
+//     http.Get, ["auth", "ok"] -> ok_handler(request, auth_config:)
+//     _method, _segments -> next()
+//   }
+// }
 
 // fn get_referer_path(request: Request(_)) -> Result(String, Nil) {
 //   request.get_header(request, "referer")

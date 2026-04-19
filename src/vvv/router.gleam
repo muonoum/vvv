@@ -24,7 +24,7 @@ pub fn service(
   use csp_nonce <- wisp.content_security_policy_protection()
   use <- serve_static(request)
   use <- wisp.log_request(request)
-  use <- auth.router(request, auth_config)
+  use <- auth.service(request, auth_config:, prefix: "auth")
 
   case request.method, wisp.path_segments(request) {
     http.Get, [] -> page_handler(request, csrf_token: "TODO", csp_nonce:)
