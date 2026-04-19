@@ -262,7 +262,7 @@ pub fn ok_handler(
     httpc.send(request.set_body(keys_request, option.None), [])
 
   let assert Ok(keys) =
-    entra.set_algorithm(keys_response.body)
+    entra.set_key_algorithm(keys_response.body)
     |> result.map_error(fn(error) {
       wisp.log_warning("set key algorithm: " <> string.inspect(error))
       error

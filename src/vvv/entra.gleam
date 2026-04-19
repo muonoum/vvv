@@ -9,7 +9,7 @@ import wisp
 
 // HACK: `ywt/verify_key.set_decoder` krever 'alg', men Entra setter ikke dette
 // feltet på nøklene sine
-pub fn set_algorithm(data: BitArray) -> Result(BitArray, json.DecodeError) {
+pub fn set_key_algorithm(data: BitArray) -> Result(BitArray, json.DecodeError) {
   let key_decoder = {
     use key_id <- decode.field("kid", decode.string)
     use key_type <- decode.field("kty", decode.string)
