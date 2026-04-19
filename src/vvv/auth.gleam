@@ -2,10 +2,9 @@ import envoy
 import gleam/bytes_tree
 import gleam/crypto
 import gleam/dynamic/decode.{type Decoder}
-import gleam/erlang/process
 import gleam/http
 import gleam/http/request.{type Request}
-import gleam/json
+import gleam/json.{type Json}
 import gleam/list
 import gleam/option
 import gleam/result
@@ -13,15 +12,17 @@ import gleam/string
 import gleam/uri.{type Uri, Uri}
 import vvv/entra
 import vvv/httpc
-import vvv/session.{type Session}
 import vvv/shared
-import vvv/store
 import wisp
 import ywt
 import ywt/claim
 import ywt/verify_key
 
 pub const cookie_name = "vvv-session"
+
+pub type User {
+  User(name: String, email: String)
+}
 
 pub type Config {
   Config(
@@ -32,6 +33,10 @@ pub type Config {
     token_uri: Uri,
     jwks_uri: Uri,
   )
+}
+
+pub type State {
+  State(nonce: String, code_verifier: String)
 }
 
 pub fn configure_from_environment() -> Result(Config, String) {
@@ -63,21 +68,12 @@ pub fn configure_from_environment() -> Result(Config, String) {
   ))
 }
 
-pub fn has_session(
-  request: wisp.Request,
-  store: process.Subject(store.Message),
-) -> Bool {
-  wisp.get_cookie(request, cookie_name, wisp.Signed)
-  |> result.map(store.contains(store, _))
-  |> result.unwrap(False)
-}
-
 fn authorize(
   uri uri: Uri,
   client_id client_id: String,
   redirect_uri redirect_uri: Uri,
   scope scope: List(String),
-) -> #(Uri, String, session.Login) {
+) -> #(Uri, String, State) {
   let key = shared.random_string(32)
   let state = shared.hashed_string(key)
   let code_verifier = shared.random_string(32)
@@ -98,7 +94,7 @@ fn authorize(
     ])
 
   let uri = Uri(..uri, query: option.Some(query))
-  #(uri, key, session.Login(nonce:, code_verifier:))
+  #(uri, key, State(nonce:, code_verifier:))
 }
 
 fn get_token(
@@ -130,27 +126,23 @@ fn get_token(
   |> Ok
 }
 
-pub fn create_session(
+fn create_session(
   response: wisp.Response,
   request request: wisp.Request,
-  store store: process.Subject(store.Message),
-  session_id session_id: String,
-  value value: Session,
+  value value: Json,
   max_age max_age: Int,
 ) -> wisp.Response {
-  store.insert(store, session_id, value)
-
   response
   |> wisp.set_cookie(
     request:,
     name: cookie_name,
-    value: session_id,
+    value: json.to_string(value),
     security: wisp.Signed,
     max_age:,
   )
 }
 
-pub fn delete_session(
+fn delete_session(
   response: wisp.Response,
   request: wisp.Request,
 ) -> wisp.Response {
@@ -166,7 +158,6 @@ pub fn delete_session(
 
 pub fn login_handler(
   request: wisp.Request,
-  store store: process.Subject(store.Message),
   oauth_config oauth_config: Config,
 ) -> wisp.Response {
   let #(authorize_uri, session_id, oauth_state) =
@@ -181,10 +172,12 @@ pub fn login_handler(
   |> wisp.redirect
   |> create_session(
     request:,
-    store:,
-    session_id:,
     max_age: 30,
-    value: session.LoginSession(oauth_state),
+    value: json.object([
+      #("session_id", json.string(session_id)),
+      #("nonce", json.string(oauth_state.nonce)),
+      #("code_verifier", json.string(oauth_state.code_verifier)),
+    ]),
   )
 }
 
@@ -217,7 +210,6 @@ pub fn callback_handler(request: wisp.Request) -> wisp.Response {
 
 pub fn ok_handler(
   request: wisp.Request,
-  store store: process.Subject(store.Message),
   oauth_config oauth_config: Config,
 ) -> wisp.Response {
   // TODO: Feilhåndtering
@@ -225,11 +217,16 @@ pub fn ok_handler(
   use request <- wisp.csrf_known_header_protection(request)
   let assert Ok(query) = request.get_query(request)
 
-  let assert Ok(session_id) =
+  let assert Ok(session) =
     wisp.get_cookie(request:, name: cookie_name, security: wisp.Signed)
 
-  let assert Ok(session.LoginSession(oauth_state)) =
-    store.get(store, session_id)
+  let assert Ok(#(session_id, oauth_state)) =
+    json.parse(session, {
+      use session_id <- decode.field("session_id", decode.string)
+      use nonce <- decode.field("nonce", decode.string)
+      use code_verifier <- decode.field("code_verifier", decode.string)
+      decode.success(#(session_id, State(nonce:, code_verifier:)))
+    })
 
   let assert Ok(True) = {
     use state <- result.map(list.key_find(query, "state"))
@@ -284,11 +281,13 @@ pub fn ok_handler(
   wisp.redirect("/")
   |> create_session(
     request:,
-    store:,
-    session_id:,
     max_age: 60 * 60 * 24,
-    value: session.User(name:, email:, id_token:, access_token:)
-      |> session.UserSession,
+    value: json.object([
+      #("name", json.string(name)),
+      #("email", json.string(email)),
+      #("access_token", json.string(access_token)),
+      #("id_token", json.string(id_token)),
+    ]),
   )
 }
 
