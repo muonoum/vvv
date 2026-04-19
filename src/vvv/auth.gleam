@@ -166,9 +166,9 @@ fn delete_session(
 
 pub fn login_handler(
   request: wisp.Request,
-  oauth_config oauth_config: Config,
+  auth_config auth_config: Config,
 ) -> wisp.Response {
-  let #(authorize_uri, session_id, oauth_state) = authorize(oauth_config)
+  let #(authorize_uri, session_id, oauth_state) = authorize(auth_config)
 
   uri.to_string(authorize_uri)
   |> wisp.redirect
@@ -233,7 +233,7 @@ pub fn callback_handler(
 
 pub fn ok_handler(
   request: wisp.Request,
-  oauth_config oauth_config: Config,
+  auth_config auth_config: Config,
 ) -> wisp.Response {
   // TODO: Feilhåndtering
 
@@ -269,7 +269,7 @@ pub fn ok_handler(
   // Keys
   //
 
-  let assert Ok(keys_request) = request.from_uri(oauth_config.jwks_uri)
+  let assert Ok(keys_request) = request.from_uri(auth_config.jwks_uri)
 
   let assert Ok(keys_response) =
     httpc.send(request.set_body(keys_request, option.None), [])
@@ -291,13 +291,13 @@ pub fn ok_handler(
 
   // let _ =
   //   echo ywt.decode(jwt: id_token, using: decode.dynamic, keys:, claims: [
-  //     claim.audience(oauth_config.client_id, []),
+  //     claim.audience(auth_config.client_id, []),
   //     claim.custom("nonce", oauth_state.nonce, json.string, decode.string),
   //   ])
 
   let assert Ok(#(name, email)) =
     ywt.decode(jwt: id_token, using: id_token_decoder(), keys:, claims: [
-      claim.audience(oauth_config.client_id, []),
+      claim.audience(auth_config.client_id, []),
       claim.custom("nonce", oauth_state.nonce, json.string, decode.string),
     ])
 
@@ -310,7 +310,7 @@ pub fn ok_handler(
 
     Ok(code) -> {
       let assert Ok(token_request) =
-        get_token(oauth_config, code_verifier: oauth_state.code_verifier, code:)
+        get_token(auth_config, code_verifier: oauth_state.code_verifier, code:)
 
       let assert Ok(token_response) = {
         token_request

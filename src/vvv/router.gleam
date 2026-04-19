@@ -16,7 +16,7 @@ import wisp
 
 pub fn service(
   request: wisp.Request,
-  oauth_config: auth.Config,
+  auth_config: auth.Config,
   serve_static: fn(wisp.Request, fn() -> wisp.Response) -> wisp.Response,
 ) -> wisp.Response {
   use <- wisp.rescue_crashes
@@ -28,13 +28,13 @@ pub fn service(
   case request.method, wisp.path_segments(request) {
     http.Get, [] -> page_handler(request, csrf_token: "TODO", csp_nonce:)
 
-    http.Get, ["auth", "login"] -> auth.login_handler(request, oauth_config:)
+    http.Get, ["auth", "login"] -> auth.login_handler(request, auth_config:)
     http.Get, ["auth", "logout"] -> auth.logout_handler(request)
 
     http.Post, ["auth", "callback"] ->
       auth.form_post_response(request, auth.callback_handler)
 
-    http.Get, ["auth", "ok"] -> auth.ok_handler(request, oauth_config:)
+    http.Get, ["auth", "ok"] -> auth.ok_handler(request, auth_config:)
 
     _method, _segments -> wisp.not_found()
   }

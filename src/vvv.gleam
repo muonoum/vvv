@@ -27,7 +27,7 @@ pub fn main() -> Nil {
     wisp.random_string(64)
   }
 
-  let assert Ok(oauth_config) = auth.configure_from_environment()
+  let assert Ok(auth_config) = auth.configure_from_environment()
 
   let app_name = process.new_name("app")
 
@@ -38,7 +38,7 @@ pub fn main() -> Nil {
     |> factory.supervised
 
   let server_spec =
-    router.service(_, oauth_config, static_handler())
+    router.service(_, auth_config, static_handler())
     |> wisp_mist.handler(secret_key_base)
     |> router.component_router(secret_key_base, app_name)
     |> mist.new
