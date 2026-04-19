@@ -32,8 +32,10 @@ pub fn service(
 
     http.Get, ["auth", "login"] -> auth.login_handler(request, oauth_config:)
     http.Get, ["auth", "logout"] -> auth.logout_handler(request)
+
     http.Post, ["auth", "callback"] ->
       auth.form_post_response(request, auth.callback_handler)
+
     http.Get, ["auth", "ok"] -> auth.ok_handler(request, oauth_config:)
 
     // TODO
