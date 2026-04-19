@@ -297,7 +297,7 @@ fn ok_handler(request: wisp.Request, config config: Config) -> wisp.Response {
     |> json.parse_bits(verify_key.set_decoder())
 
   //
-  // ID
+  // Id
   //
 
   let assert Ok(id_token) = list.key_find(query, "id_token")
