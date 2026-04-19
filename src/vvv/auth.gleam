@@ -171,8 +171,11 @@ pub fn router(
 ) -> wisp.Response {
   case request.method, wisp.path_segments(request) {
     http.Get, ["auth", "login"] -> {
-      use request <- wisp.csrf_known_header_protection(request)
-      let return_path = get_return_path(request)
+      let return_path =
+        wisp.get_query(request)
+        |> list.key_find("return_path")
+        |> result.unwrap("/")
+
       login_handler(request, return_path:, auth_config:)
     }
 
@@ -193,12 +196,11 @@ pub fn router(
   }
 }
 
-fn get_return_path(request: Request(_)) -> String {
-  request.get_header(request, "referer")
-  |> result.try(uri.parse)
-  |> result.map(fn(uri) { uri.path })
-  |> result.unwrap("/")
-}
+// fn get_referer_path(request: Request(_)) -> Result(String, Nil) {
+//   request.get_header(request, "referer")
+//   |> result.try(uri.parse)
+//   |> result.map(fn(uri) { uri.path })
+// }
 
 pub fn login_handler(
   request: wisp.Request,
@@ -232,7 +234,7 @@ pub fn query_response(
   request: Request(wisp.Connection),
   next: fn(String, String, Option(String)) -> wisp.Response,
 ) -> wisp.Response {
-  let assert Ok(query) = request.get_query(request)
+  let query = wisp.get_query(request)
   let assert Ok(id_token) = list.key_find(query, "id_token")
   let assert Ok(state) = list.key_find(query, "state")
   let code = list.key_find(query, "code") |> option.from_result
@@ -273,7 +275,7 @@ pub fn ok_handler(
 ) -> wisp.Response {
   // TODO: Feilhåndtering
 
-  let assert Ok(query) = request.get_query(request)
+  let query = wisp.get_query(request)
 
   //
   // Session
