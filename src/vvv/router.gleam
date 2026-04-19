@@ -50,30 +50,24 @@ pub fn component_router(
 
   case wisp.path_segments(request) {
     ["components", "app"] -> {
-      use user <- get_user(request, secret_key_base)
-      component.start(request, app, user)
+      get_user(request, secret_key_base)
+      |> component.start(request, app, _)
     }
 
     _else -> next_router(request)
   }
 }
 
-fn get_user(
-  request: Request(_),
-  secret_key_base: String,
-  next: fn(Option(auth.User)) -> Response(_),
-) -> Response(_) {
-  next(
-    request.get_cookies(request)
-    |> list.key_find(auth.cookie_name)
-    |> result.try(crypto.verify_signed_message(_, <<secret_key_base:utf8>>))
-    |> result.try(bit_array.to_string)
+fn get_user(request: Request(_), secret_key_base: String) -> Option(auth.User) {
+  request.get_cookies(request)
+  |> list.key_find(auth.cookie_name)
+  |> result.try(crypto.verify_signed_message(_, <<secret_key_base:utf8>>))
+  |> result.try(bit_array.to_string)
+  |> option.from_result
+  |> option.then(fn(data) {
+    json.parse(data, auth.user_decoder())
     |> option.from_result
-    |> option.then(fn(data) {
-      json.parse(data, auth.user_decoder())
-      |> option.from_result
-    }),
-  )
+  })
 }
 
 fn page_handler(
