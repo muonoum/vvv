@@ -32,6 +32,7 @@ pub type Config {
     authorize_uri: Uri,
     token_uri: Uri,
     jwks_uri: Uri,
+    scope: List(String),
   )
 }
 
@@ -46,8 +47,12 @@ pub fn configure_from_environment() -> Result(Config, String) {
   }
 
   let try = fn(key, into) {
-    envoy.get(key)
-    |> result.try(into)
+    result.try(envoy.get(key), into)
+    |> result.replace_error(key)
+  }
+
+  let map = fn(key, into) {
+    result.map(envoy.get(key), into)
     |> result.replace_error(key)
   }
 
@@ -57,6 +62,7 @@ pub fn configure_from_environment() -> Result(Config, String) {
   use authorize_uri <- result.try(try("AUTHORIZE_URI", uri.parse))
   use token_uri <- result.try(try("TOKEN_URI", uri.parse))
   use jwks_uri <- result.try(try("JWKS_URI", uri.parse))
+  use scope <- result.try(map("SCOPE", string.split(_, ",")))
 
   Ok(Config(
     client_id:,
@@ -65,6 +71,7 @@ pub fn configure_from_environment() -> Result(Config, String) {
     authorize_uri:,
     token_uri:,
     jwks_uri:,
+    scope:,
   ))
 }
 
@@ -165,7 +172,7 @@ pub fn login_handler(
       uri: oauth_config.authorize_uri,
       client_id: oauth_config.client_id,
       redirect_uri: oauth_config.redirect_uri,
-      scope: ["openid", "profile", "email"],
+      scope: oauth_config.scope,
     )
 
   uri.to_string(authorize_uri)
