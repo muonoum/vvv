@@ -40,15 +40,15 @@ pub fn component_router(
   secret_key_base: String,
   app: component.Name(Option(auth.User), message),
 ) -> fn(Request(_)) -> Response(_) {
-  use request <- identity
+  use request: Request(_) <- identity
 
-  case wisp.path_segments(request) {
-    ["components", "app"] -> {
+  case request.method, wisp.path_segments(request) {
+    http.Get, ["components", "app"] -> {
       get_user(request, secret_key_base)
       |> component.start(request, app, _)
     }
 
-    _else -> next_router(request)
+    _method, _segments -> next_router(request)
   }
 }
 

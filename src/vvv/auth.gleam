@@ -8,7 +8,6 @@ import gleam/json.{type Json}
 import gleam/list
 import gleam/option.{type Option}
 import gleam/result
-import gleam/string
 import gleam/uri.{type Uri, Uri}
 import vvv/entra
 import vvv/httpc
@@ -184,7 +183,7 @@ fn login_handler(
   return_path return_path: String,
   config config: Config,
 ) -> wisp.Response {
-  let #(authorize_uri, session_id, oauth_state) = authorize(config)
+  let #(authorize_uri, session_state, oauth_state) = authorize(config)
 
   uri.to_string(authorize_uri)
   |> wisp.redirect
@@ -192,7 +191,7 @@ fn login_handler(
     request:,
     max_age: 30,
     value: json.object([
-      #("session_id", json.string(session_id)),
+      #("session_state", json.string(session_state)),
       #("nonce", json.string(oauth_state.nonce)),
       #("code_verifier", json.string(oauth_state.code_verifier)),
       #("return_path", json.string(return_path)),
@@ -248,52 +247,33 @@ fn callback_handler(
   wisp.redirect(uri.to_string(uri))
 }
 
+// TODO: Feilhåndtering
 fn ok_handler(request: wisp.Request, config config: Config) -> wisp.Response {
-  // TODO: Feilhåndtering
-
   let query = wisp.get_query(request)
 
-  //
-  // Session
-  //
+  let assert Ok(#(session_state, return_path, oauth_state)) = {
+    let assert Ok(session) =
+      wisp.get_cookie(request:, name: session_cookie, security: wisp.Signed)
 
-  let assert Ok(session) =
-    wisp.get_cookie(request:, name: session_cookie, security: wisp.Signed)
-
-  let assert Ok(#(session_id, return_path, oauth_state)) =
     json.parse(session, login_session_decoder())
-
-  //
-  // State
-  //
+  }
 
   let assert Ok(True) = {
     use state <- result.map(list.key_find(query, "state"))
-    let session_id = shared.hashed_string(session_id)
-    crypto.secure_compare(<<session_id:utf8>>, <<state:utf8>>)
+    let session_state = shared.hashed_string(session_state)
+    crypto.secure_compare(<<session_state:utf8>>, <<state:utf8>>)
   }
 
-  //
-  // Keys
-  //
+  let assert Ok(keys) = {
+    let assert Ok(request) = request.from_uri(config.jwks_uri)
 
-  let assert Ok(keys_request) = request.from_uri(config.jwks_uri)
+    let assert Ok(response) =
+      httpc.send(request.set_body(request, option.None), [])
 
-  let assert Ok(keys_response) =
-    httpc.send(request.set_body(keys_request, option.None), [])
-
-  let assert Ok(keys) =
-    entra.set_key_algorithm(keys_response.body)
-    |> result.map_error(fn(error) {
-      wisp.log_warning("set key algorithm: " <> string.inspect(error))
-      error
-    })
-    |> result.unwrap(keys_response.body)
+    entra.set_key_algorithm(response.body)
+    |> result.unwrap(response.body)
     |> json.parse_bits(verify_key.set_decoder())
-
-  //
-  // Id
-  //
+  }
 
   let assert Ok(id_token) = list.key_find(query, "id_token")
 
@@ -309,34 +289,25 @@ fn ok_handler(request: wisp.Request, config config: Config) -> wisp.Response {
       claim.custom("nonce", oauth_state.nonce, json.string, decode.string),
     ])
 
-  //
-  // Access
-  //
-
   let access_token = case list.key_find(query, "code") {
     Error(Nil) -> json.null()
 
     Ok(code) -> {
-      let assert Ok(token_request) =
+      let assert Ok(request) =
         get_token(config, code_verifier: oauth_state.code_verifier, code:)
 
-      let assert Ok(token_response) = {
-        token_request
-        |> request.map(bytes_tree.from_string)
+      let assert Ok(response) = {
+        request.map(request, bytes_tree.from_string)
         |> request.map(option.Some)
         |> httpc.send([])
       }
 
       let assert Ok(#(access_token, _, _, _)) =
-        json.parse_bits(token_response.body, access_token_decoder())
+        json.parse_bits(response.body, access_token_decoder())
 
       json.string(access_token)
     }
   }
-
-  //
-  // Return
-  //
 
   wisp.redirect(return_path)
   |> create_session(
@@ -353,11 +324,11 @@ fn ok_handler(request: wisp.Request, config config: Config) -> wisp.Response {
 }
 
 fn login_session_decoder() -> Decoder(#(String, String, State)) {
-  use session_id <- decode.field("session_id", decode.string)
+  use session_state <- decode.field("session_state", decode.string)
   use nonce <- decode.field("nonce", decode.string)
   use code_verifier <- decode.field("code_verifier", decode.string)
   use return_path <- decode.field("return_path", decode.string)
-  decode.success(#(session_id, return_path, State(nonce:, code_verifier:)))
+  decode.success(#(session_state, return_path, State(nonce:, code_verifier:)))
 }
 
 fn id_token_decoder() -> Decoder(#(String, String)) {
