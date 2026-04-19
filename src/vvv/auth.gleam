@@ -24,12 +24,6 @@ pub type User {
   User(name: String, email: String)
 }
 
-pub fn user_decoder() {
-  use name <- decode.field("name", decode.string)
-  use email <- decode.field("email", decode.string)
-  decode.success(User(name:, email:))
-}
-
 pub type Config {
   Config(
     client_id: String,
@@ -46,6 +40,12 @@ pub type Config {
 
 pub type State {
   State(nonce: String, code_verifier: String)
+}
+
+pub fn user_decoder() {
+  use name <- decode.field("name", decode.string)
+  use email <- decode.field("email", decode.string)
+  decode.success(User(name:, email:))
 }
 
 pub fn configure_from_environment() -> Result(Config, String) {
