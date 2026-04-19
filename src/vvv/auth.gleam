@@ -339,6 +339,7 @@ pub fn ok_handler(
       #("email", json.string(email)),
       #("access_token", access_token),
       #("id_token", json.string(id_token)),
+      #("code_verifier", json.string(oauth_state.code_verifier)),
     ]),
   )
 }
