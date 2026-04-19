@@ -24,6 +24,12 @@ pub type User {
   User(name: String, email: String)
 }
 
+pub fn user_decoder() {
+  use name <- decode.field("name", decode.string)
+  use email <- decode.field("email", decode.string)
+  decode.success(User(name:, email:))
+}
+
 pub type Config {
   Config(
     client_id: String,
