@@ -6,7 +6,7 @@ import gleam/http
 import gleam/http/request.{type Request}
 import gleam/json.{type Json}
 import gleam/list
-import gleam/option
+import gleam/option.{type Option}
 import gleam/result
 import gleam/string
 import gleam/uri.{type Uri, Uri}
@@ -199,20 +199,36 @@ pub fn logout_handler(request: wisp.Request) -> wisp.Response {
   }
 }
 
-pub fn callback_handler(request: wisp.Request) -> wisp.Response {
-  use form_data <- wisp.require_form(request)
+pub fn query_response(
+  request: Request(wisp.Connection),
+  next: fn(String, String, Option(String)) -> wisp.Response,
+) -> wisp.Response {
+  let assert Ok(query) = request.get_query(request)
+  let assert Ok(id_token) = list.key_find(query, "id_token")
+  let assert Ok(state) = list.key_find(query, "state")
+  let code = list.key_find(query, "code") |> option.from_result
+  next(id_token, state, code)
+}
 
+pub fn form_post_response(
+  request: Request(wisp.Connection),
+  next: fn(String, String, Option(String)) -> wisp.Response,
+) -> wisp.Response {
+  use form_data <- wisp.require_form(request)
   let assert Ok(id_token) = list.key_find(form_data.values, "id_token")
   let assert Ok(state) = list.key_find(form_data.values, "state")
+  let code = list.key_find(form_data.values, "code") |> option.from_result
+  next(id_token, state, code)
+}
+
+pub fn callback_handler(id_token, state, code) {
   let parameters = [#("id_token", id_token), #("state", state)]
 
   let query =
-    option.Some(
-      uri.query_to_string(case list.key_find(form_data.values, "code") {
-        Ok(code) -> [#("code", code), ..parameters]
-        Error(Nil) -> parameters
-      }),
-    )
+    option.Some(uri.query_to_string(
+      option.map(code, fn(code) { [#("code", code), ..parameters] })
+      |> option.unwrap(parameters),
+    ))
 
   let uri = uri.Uri(..uri.empty, path: "/auth/ok", query:)
   wisp.redirect(uri.to_string(uri))
