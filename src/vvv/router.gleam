@@ -38,14 +38,6 @@ pub fn service(
 
     http.Get, ["auth", "ok"] -> auth.ok_handler(request, oauth_config:)
 
-    // TODO
-    http.Post, ["auth", "callback", "query"] ->
-      auth.query_response(request, auth.callback_handler)
-
-    // TODO
-    http.Post, ["auth", "callback", "form-post"] ->
-      auth.form_post_response(request, auth.callback_handler)
-
     _method, _segments -> wisp.not_found()
   }
 }
