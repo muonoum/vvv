@@ -211,7 +211,11 @@ pub fn form_post_response(
   next(id_token, state, code)
 }
 
-pub fn callback_handler(id_token, state, code) {
+pub fn callback_handler(
+  id_token: String,
+  state: String,
+  code: Option(String),
+) -> wisp.Response {
   let parameters = [#("id_token", id_token), #("state", state)]
 
   let query =
