@@ -27,11 +27,7 @@ pub fn service(
   use <- auth.router(request, auth_config)
 
   case request.method, wisp.path_segments(request) {
-    http.Get, [] | http.Get, ["other"] -> {
-      use request <- wisp.csrf_known_header_protection(request)
-      page_handler(request, csrf_token: "TODO", csp_nonce:)
-    }
-
+    http.Get, [] -> page_handler(request, csrf_token: "TODO", csp_nonce:)
     _method, _segments -> wisp.not_found()
   }
 }

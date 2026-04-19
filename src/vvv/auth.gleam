@@ -179,19 +179,12 @@ pub fn router(
       login_handler(request, return_path:, auth_config:)
     }
 
-    http.Get, ["auth", "logout"] -> {
-      use request <- wisp.csrf_known_header_protection(request)
-      logout_handler(request)
-    }
+    http.Get, ["auth", "logout"] -> logout_handler(request)
 
     http.Post, ["auth", "callback"] ->
       form_post_response(request, callback_handler)
 
-    http.Get, ["auth", "ok"] -> {
-      use request <- wisp.csrf_known_header_protection(request)
-      ok_handler(request, auth_config:)
-    }
-
+    http.Get, ["auth", "ok"] -> ok_handler(request, auth_config:)
     _method, _segments -> next()
   }
 }
@@ -285,13 +278,7 @@ pub fn ok_handler(
     wisp.get_cookie(request:, name: cookie_name, security: wisp.Signed)
 
   let assert Ok(#(session_id, return_path, oauth_state)) =
-    json.parse(session, {
-      use session_id <- decode.field("session_id", decode.string)
-      use nonce <- decode.field("nonce", decode.string)
-      use code_verifier <- decode.field("code_verifier", decode.string)
-      use return_path <- decode.field("return_path", decode.string)
-      decode.success(#(session_id, return_path, State(nonce:, code_verifier:)))
-    })
+    json.parse(session, login_session_decoder())
 
   //
   // State
@@ -380,6 +367,14 @@ pub fn ok_handler(
       #("access_token", access_token),
     ]),
   )
+}
+
+fn login_session_decoder() -> Decoder(#(String, String, State)) {
+  use session_id <- decode.field("session_id", decode.string)
+  use nonce <- decode.field("nonce", decode.string)
+  use code_verifier <- decode.field("code_verifier", decode.string)
+  use return_path <- decode.field("return_path", decode.string)
+  decode.success(#(session_id, return_path, State(nonce:, code_verifier:)))
 }
 
 fn id_token_decoder() -> Decoder(#(String, String)) {
