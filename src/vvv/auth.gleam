@@ -49,25 +49,15 @@ pub fn user_decoder() {
 }
 
 pub fn configure_from_environment() -> Result(Config, String) {
-  let get = fn(key) {
-    envoy.get(key)
-    |> result.replace_error(key)
-  }
-
-  let try = fn(key, into) {
-    result.try(envoy.get(key), into)
-    |> result.replace_error(key)
-  }
-
-  use client_id <- result.try(get("CLIENT_ID"))
-  use client_secret <- result.try(get("CLIENT_SECRET"))
-  use redirect_uri <- result.try(try("REDIRECT_URI", uri.parse))
-  use authorize_uri <- result.try(try("AUTHORIZE_URI", uri.parse))
-  use token_uri <- result.try(try("TOKEN_URI", uri.parse))
-  use jwks_uri <- result.try(try("JWKS_URI", uri.parse))
-  use response_mode <- result.try(get("RESPONSE_MODE"))
-  use response_type <- result.try(get("RESPONSE_TYPE"))
-  use scope <- result.try(get("SCOPE"))
+  use client_id <- result.try(get_key("CLIENT_ID"))
+  use client_secret <- result.try(get_key("CLIENT_SECRET"))
+  use redirect_uri <- result.try(try_key("REDIRECT_URI", uri.parse))
+  use authorize_uri <- result.try(try_key("AUTHORIZE_URI", uri.parse))
+  use token_uri <- result.try(try_key("TOKEN_URI", uri.parse))
+  use jwks_uri <- result.try(try_key("JWKS_URI", uri.parse))
+  use response_mode <- result.try(get_key("RESPONSE_MODE"))
+  use response_type <- result.try(get_key("RESPONSE_TYPE"))
+  use scope <- result.try(get_key("SCOPE"))
 
   Ok(Config(
     client_id:,
@@ -80,6 +70,19 @@ pub fn configure_from_environment() -> Result(Config, String) {
     response_type:,
     scope:,
   ))
+}
+
+fn get_key(key: String) -> Result(String, String) {
+  envoy.get(key)
+  |> result.replace_error(key)
+}
+
+fn try_key(
+  key: String,
+  into: fn(String) -> Result(a, Nil),
+) -> Result(a, String) {
+  result.try(envoy.get(key), into)
+  |> result.replace_error(key)
 }
 
 fn authorize(config: Config) -> #(Uri, String, State) {
