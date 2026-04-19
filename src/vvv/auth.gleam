@@ -38,7 +38,7 @@ pub type Config {
   )
 }
 
-pub type State {
+type State {
   State(nonce: String, code_verifier: String)
 }
 
@@ -83,6 +83,28 @@ fn try_key(
 ) -> Result(a, String) {
   result.try(envoy.get(key), into)
   |> result.replace_error(key)
+}
+
+pub fn router(
+  request: wisp.Request,
+  config config: Config,
+  segments segments: List(String),
+) -> wisp.Response {
+  case request.method, segments {
+    http.Get, ["login"] ->
+      login_handler(
+        request,
+        config:,
+        return_path: wisp.get_query(request)
+          |> list.key_find("return_path")
+          |> result.unwrap("/"),
+      )
+
+    http.Get, ["logout"] -> logout_handler(request)
+    http.Post, ["callback"] -> form_post_response(request, callback_handler)
+    http.Get, ["ok"] -> ok_handler(request, config:)
+    _method, _segments -> wisp.not_found()
+  }
 }
 
 fn authorize(config: Config) -> #(Uri, String, State) {
@@ -164,48 +186,12 @@ fn delete_session(
   )
 }
 
-pub fn service(
-  request: wisp.Request,
-  config auth_config: Config,
-  prefix prefix: String,
-  next next: fn() -> wisp.Response,
-) -> wisp.Response {
-  case wisp.path_segments(request) {
-    [first, ..segments] if first == prefix ->
-      router(request, auth_config:, segments:)
-
-    _segments -> next()
-  }
-}
-
-fn router(
-  request: wisp.Request,
-  auth_config auth_config: Config,
-  segments segments: List(String),
-) -> wisp.Response {
-  case request.method, segments {
-    http.Get, ["login"] ->
-      login_handler(
-        request,
-        auth_config:,
-        return_path: wisp.get_query(request)
-          |> list.key_find("return_path")
-          |> result.unwrap("/"),
-      )
-
-    http.Get, ["logout"] -> logout_handler(request)
-    http.Post, ["callback"] -> form_post_response(request, callback_handler)
-    http.Get, ["ok"] -> ok_handler(request, auth_config:)
-    _method, _segments -> wisp.not_found()
-  }
-}
-
 fn login_handler(
   request: wisp.Request,
   return_path return_path: String,
-  auth_config auth_config: Config,
+  config config: Config,
 ) -> wisp.Response {
-  let #(authorize_uri, session_id, oauth_state) = authorize(auth_config)
+  let #(authorize_uri, session_id, oauth_state) = authorize(config)
 
   uri.to_string(authorize_uri)
   |> wisp.redirect
@@ -267,10 +253,7 @@ fn callback_handler(
   wisp.redirect(uri.to_string(uri))
 }
 
-fn ok_handler(
-  request: wisp.Request,
-  auth_config auth_config: Config,
-) -> wisp.Response {
+fn ok_handler(request: wisp.Request, config config: Config) -> wisp.Response {
   // TODO: Feilhåndtering
 
   let query = wisp.get_query(request)
@@ -299,7 +282,7 @@ fn ok_handler(
   // Keys
   //
 
-  let assert Ok(keys_request) = request.from_uri(auth_config.jwks_uri)
+  let assert Ok(keys_request) = request.from_uri(config.jwks_uri)
 
   let assert Ok(keys_response) =
     httpc.send(request.set_body(keys_request, option.None), [])
@@ -321,13 +304,13 @@ fn ok_handler(
 
   // let _ =
   //   echo ywt.decode(jwt: id_token, using: decode.dynamic, keys:, claims: [
-  //     claim.audience(auth_config.client_id, []),
+  //     claim.audience(config.client_id, []),
   //     claim.custom("nonce", oauth_state.nonce, json.string, decode.string),
   //   ])
 
   let assert Ok(#(name, email)) =
     ywt.decode(jwt: id_token, using: id_token_decoder(), keys:, claims: [
-      claim.audience(auth_config.client_id, []),
+      claim.audience(config.client_id, []),
       claim.custom("nonce", oauth_state.nonce, json.string, decode.string),
     ])
 
@@ -340,7 +323,7 @@ fn ok_handler(
 
     Ok(code) -> {
       let assert Ok(token_request) =
-        get_token(auth_config, code_verifier: oauth_state.code_verifier, code:)
+        get_token(config, code_verifier: oauth_state.code_verifier, code:)
 
       let assert Ok(token_response) = {
         token_request
