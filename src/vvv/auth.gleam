@@ -89,7 +89,9 @@ fn authorize(
 
   let query =
     uri.query_to_string([
-      #("response_type", "code id_token"),
+      // TODO: Config?
+      // #("response_type", "code id_token"),
+      #("response_type", "id_token"),
       #("client_id", client_id),
       #("redirect_uri", uri.to_string(redirect_uri)),
       #("response_mode", "form_post"),
@@ -200,18 +202,19 @@ pub fn logout_handler(request: wisp.Request) -> wisp.Response {
 pub fn callback_handler(request: wisp.Request) -> wisp.Response {
   use form_data <- wisp.require_form(request)
 
-  let assert Ok(code) = list.key_find(form_data.values, "code")
   let assert Ok(id_token) = list.key_find(form_data.values, "id_token")
   let assert Ok(state) = list.key_find(form_data.values, "state")
+  let parameters = [#("id_token", id_token), #("state", state)]
 
   let query =
-    uri.query_to_string([
-      #("code", code),
-      #("id_token", id_token),
-      #("state", state),
-    ])
+    option.Some(
+      uri.query_to_string(case list.key_find(form_data.values, "code") {
+        Ok(code) -> [#("code", code), ..parameters]
+        Error(Nil) -> parameters
+      }),
+    )
 
-  let uri = uri.Uri(..uri.empty, path: "/auth/ok", query: option.Some(query))
+  let uri = uri.Uri(..uri.empty, path: "/auth/ok", query:)
   wisp.redirect(uri.to_string(uri))
 }
 
@@ -224,6 +227,10 @@ pub fn ok_handler(
   use request <- wisp.csrf_known_header_protection(request)
   let assert Ok(query) = request.get_query(request)
 
+  //
+  // Session
+  //
+
   let assert Ok(session) =
     wisp.get_cookie(request:, name: cookie_name, security: wisp.Signed)
 
@@ -235,14 +242,19 @@ pub fn ok_handler(
       decode.success(#(session_id, State(nonce:, code_verifier:)))
     })
 
+  //
+  // State
+  //
+
   let assert Ok(True) = {
     use state <- result.map(list.key_find(query, "state"))
     let session_id = shared.hashed_string(session_id)
     crypto.secure_compare(<<session_id:utf8>>, <<state:utf8>>)
   }
 
-  let assert Ok(id_token) = list.key_find(query, "id_token")
-  let assert Ok(code) = list.key_find(query, "code")
+  //
+  // Keys
+  //
 
   let assert Ok(keys_request) = request.from_uri(oauth_config.jwks_uri)
 
@@ -258,6 +270,12 @@ pub fn ok_handler(
     |> result.unwrap(keys_response.body)
     |> json.parse_bits(verify_key.set_decoder())
 
+  //
+  // ID
+  //
+
+  let assert Ok(id_token) = list.key_find(query, "id_token")
+
   // let _ =
   //   echo ywt.decode(jwt: id_token, using: decode.dynamic, keys:, claims: [
   //     claim.audience(oauth_config.client_id, []),
@@ -270,26 +288,42 @@ pub fn ok_handler(
       claim.custom("nonce", oauth_state.nonce, json.string, decode.string),
     ])
 
-  let assert Ok(token_request) =
-    get_token(
-      uri: oauth_config.token_uri,
-      client_id: oauth_config.client_id,
-      client_secret: oauth_config.client_secret,
-      redirect_uri: oauth_config.redirect_uri,
-      scope: ["openid", "profile", "email"],
-      code_verifier: oauth_state.code_verifier,
-      code:,
-    )
+  //
+  // Access
+  //
 
-  let assert Ok(token_response) = {
-    token_request
-    |> request.map(bytes_tree.from_string)
-    |> request.map(option.Some)
-    |> httpc.send([])
+  let access_token = case list.key_find(query, "code") {
+    Error(Nil) -> json.null()
+
+    Ok(code) -> {
+      let assert Ok(token_request) =
+        get_token(
+          uri: oauth_config.token_uri,
+          client_id: oauth_config.client_id,
+          client_secret: oauth_config.client_secret,
+          redirect_uri: oauth_config.redirect_uri,
+          scope: oauth_config.scope,
+          code_verifier: oauth_state.code_verifier,
+          code:,
+        )
+
+      let assert Ok(token_response) = {
+        token_request
+        |> request.map(bytes_tree.from_string)
+        |> request.map(option.Some)
+        |> httpc.send([])
+      }
+
+      let assert Ok(#(access_token, _, _, _)) =
+        json.parse_bits(token_response.body, access_token_decoder())
+
+      json.string(access_token)
+    }
   }
 
-  let assert Ok(#(access_token, _, _, _)) =
-    json.parse_bits(token_response.body, access_token_decoder())
+  //
+  // Return
+  //
 
   wisp.redirect("/")
   |> create_session(
@@ -298,7 +332,7 @@ pub fn ok_handler(
     value: json.object([
       #("name", json.string(name)),
       #("email", json.string(email)),
-      #("access_token", json.string(access_token)),
+      #("access_token", access_token),
       #("id_token", json.string(id_token)),
     ]),
   )
