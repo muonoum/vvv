@@ -2,17 +2,16 @@ watch := watchexec --clear --quiet --restart --stop-signal INT --stop-timeout 15
 
 .PHONY: dev
 dev:
-	HTTP_PORT=1980 \
-	SECRET_KEY_BASE=VPJ4WamuGU6kGoQ3UfXlozI0yGbZ06dVFTzpE6ztdWKjiHXEpo \
-	make watch
+	$(watch) make run --no-print-directory
+
+.PHONY: dev-env
+dev-env:
+	test -n "$(env)"
+	$(watch) "source $(env) && make run --no-print-directory"
 
 .PHONY: run
 run: frontend
 	gleam run
-
-.PHONY: watch
-watch: .restart
-	$(watch) make run --no-print-directory
 
 .PHONY: frontend
 frontend:

@@ -41,12 +41,6 @@ type State {
   State(nonce: String, code_verifier: String)
 }
 
-pub fn user_decoder() {
-  use name <- decode.field("name", decode.string)
-  use email <- decode.field("email", decode.string)
-  decode.success(User(name:, email:))
-}
-
 pub fn configure_from_environment() -> Result(Config, String) {
   use client_id <- result.try(get_key("CLIENT_ID"))
   use client_secret <- result.try(get_key("CLIENT_SECRET"))
@@ -107,11 +101,11 @@ pub fn router(
 }
 
 fn authorize(config: Config) -> #(Uri, String, State) {
-  let key = shared.random_string(32)
-  let state = shared.hashed_string(key)
-  let code_verifier = shared.random_string(32)
-  let code_challenge = shared.hashed_string(code_verifier)
-  let nonce = shared.random_string(32)
+  let key = shared.random(32)
+  let state = shared.hash(key)
+  let code_verifier = shared.random(32)
+  let code_challenge = shared.hash(code_verifier)
+  let nonce = shared.random(32)
 
   let query =
     uri.query_to_string([
@@ -209,39 +203,43 @@ fn logout_handler(request: wisp.Request) -> wisp.Response {
 @internal
 pub fn query_response(
   request: Request(wisp.Connection),
-  next: fn(String, String, Option(String)) -> wisp.Response,
+  next: fn(String, Option(String), Option(String)) -> wisp.Response,
 ) -> wisp.Response {
   let query = wisp.get_query(request)
-  let assert Ok(id_token) = list.key_find(query, "id_token")
   let assert Ok(state) = list.key_find(query, "state")
-  let code = list.key_find(query, "code") |> option.from_result
-  next(id_token, state, code)
+  let id_token = list.key_find(query, "id_token")
+  let code = list.key_find(query, "code")
+  next(state, option.from_result(id_token), option.from_result(code))
 }
 
 @internal
 pub fn form_post_response(
   request: Request(wisp.Connection),
-  next: fn(String, String, Option(String)) -> wisp.Response,
+  next: fn(String, Option(String), Option(String)) -> wisp.Response,
 ) -> wisp.Response {
   use form_data <- wisp.require_form(request)
-  let assert Ok(id_token) = list.key_find(form_data.values, "id_token")
   let assert Ok(state) = list.key_find(form_data.values, "state")
-  let code = list.key_find(form_data.values, "code") |> option.from_result
-  next(id_token, state, code)
+  let id_token = list.key_find(form_data.values, "id_token")
+  let code = list.key_find(form_data.values, "code")
+  next(state, option.from_result(id_token), option.from_result(code))
 }
 
 fn callback_handler(
-  id_token: String,
   state: String,
+  id_token: Option(String),
   code: Option(String),
 ) -> wisp.Response {
-  let parameters = [#("id_token", id_token), #("state", state)]
+  let required = [#("state", state)]
+  let options = [#("id_token", id_token), #("code", code)]
 
   let query =
-    option.Some(uri.query_to_string(
-      option.map(code, fn(code) { [#("code", code), ..parameters] })
-      |> option.unwrap(parameters),
-    ))
+    option.Some(
+      uri.query_to_string({
+        use all, #(key, option) <- list.fold(options, required)
+        option.map(option, fn(value) { [#(key, value), ..all] })
+        |> option.unwrap(all)
+      }),
+    )
 
   let uri = uri.Uri(..uri.empty, path: "/auth/ok", query:)
   wisp.redirect(uri.to_string(uri))
@@ -260,7 +258,7 @@ fn ok_handler(request: wisp.Request, config config: Config) -> wisp.Response {
 
   let assert Ok(True) = {
     use state <- result.map(list.key_find(query, "state"))
-    let session_state = shared.hashed_string(session_state)
+    let session_state = shared.hash(session_state)
     crypto.secure_compare(<<session_state:utf8>>, <<state:utf8>>)
   }
 
@@ -275,19 +273,25 @@ fn ok_handler(request: wisp.Request, config config: Config) -> wisp.Response {
     |> json.parse_bits(verify_key.set_decoder())
   }
 
-  let assert Ok(id_token) = list.key_find(query, "id_token")
+  let #(id_token, user) = case list.key_find(query, "id_token") {
+    Error(Nil) -> #(json.null(), json.null())
 
-  // let _ =
-  //   echo ywt.decode(jwt: id_token, using: decode.dynamic, keys:, claims: [
-  //     claim.audience(config.client_id, []),
-  //     claim.custom("nonce", oauth_state.nonce, json.string, decode.string),
-  //   ])
+    Ok(id_token) -> {
+      let assert Ok(user) =
+        ywt.decode(jwt: id_token, using: user_decoder(), keys:, claims: [
+          claim.audience(config.client_id, []),
+          claim.custom("nonce", oauth_state.nonce, json.string, decode.string),
+        ])
 
-  let assert Ok(#(name, email)) =
-    ywt.decode(jwt: id_token, using: id_token_decoder(), keys:, claims: [
-      claim.audience(config.client_id, []),
-      claim.custom("nonce", oauth_state.nonce, json.string, decode.string),
-    ])
+      // let _ =
+      //   echo ywt.decode(jwt: id_token, using: decode.dynamic, keys:, claims: [
+      //     claim.audience(config.client_id, []),
+      //     claim.custom("nonce", oauth_state.nonce, json.string, decode.string),
+      //   ])
+
+      #(json.string(id_token), encode_user(user))
+    }
+  }
 
   let access_token = case list.key_find(query, "code") {
     Error(Nil) -> json.null()
@@ -314,9 +318,8 @@ fn ok_handler(request: wisp.Request, config config: Config) -> wisp.Response {
     request:,
     max_age: 60 * 60 * 24,
     value: json.object([
-      #("name", json.string(name)),
-      #("email", json.string(email)),
-      #("id_token", json.string(id_token)),
+      #("user", user),
+      #("id_token", id_token),
       #("code_verifier", json.string(oauth_state.code_verifier)),
       #("access_token", access_token),
     ]),
@@ -331,16 +334,39 @@ fn login_session_decoder() -> Decoder(#(String, String, State)) {
   decode.success(#(session_state, return_path, State(nonce:, code_verifier:)))
 }
 
-fn id_token_decoder() -> Decoder(#(String, String)) {
-  use name <- decode.field("name", decode.string)
-  use email <- decode.field("email", decode.string)
-  decode.success(#(name, email))
-}
-
 fn access_token_decoder() -> Decoder(#(String, String, Int, String)) {
   use access_token <- decode.field("access_token", decode.string)
   use scope <- decode.field("scope", decode.string)
   use expires_in <- decode.field("expires_in", decode.int)
   use token_type <- decode.field("token_type", decode.string)
   decode.success(#(access_token, scope, expires_in, token_type))
+}
+
+fn encode_user(user: User) -> Json {
+  json.object([
+    #("name", json.string(user.name)),
+    #("email", json.string(user.email)),
+  ])
+}
+
+fn user_decoder() -> Decoder(User) {
+  use name <- decode.field("name", decode.string)
+  use email <- decode.field("email", decode.string)
+  decode.success(User(name:, email:))
+}
+
+pub fn session_user_decoder() -> Decoder(User) {
+  decode.at(["user"], user_decoder())
+}
+
+pub fn session_id_token_decoder() -> Decoder(String) {
+  decode.at(["id_token"], decode.string)
+}
+
+pub fn session_access_token_decoder() -> Decoder(String) {
+  decode.at(["access_token"], decode.string)
+}
+
+pub fn session_code_verifier_decoder() -> Decoder(String) {
+  decode.at(["code_verifier"], decode.string)
 }

@@ -38,7 +38,7 @@ pub fn service(
 pub fn component_router(
   next_router: fn(Request(_)) -> Response(_),
   secret_key_base: String,
-  app: component.Name(Option(auth.User), message),
+  app: component.Name(Result(Option(auth.User), String), message),
 ) -> fn(Request(_)) -> Response(_) {
   use request: Request(_) <- identity
 
@@ -52,16 +52,30 @@ pub fn component_router(
   }
 }
 
-fn get_user(request: Request(_), secret_key_base: String) -> Option(auth.User) {
-  request.get_cookies(request)
-  |> list.key_find(auth.session_cookie)
-  |> result.try(crypto.verify_signed_message(_, <<secret_key_base:utf8>>))
-  |> result.try(bit_array.to_string)
-  |> option.from_result
-  |> option.then(fn(data) {
-    json.parse(data, auth.user_decoder())
-    |> option.from_result
-  })
+fn get_user(
+  request: Request(_),
+  secret_key_base: String,
+) -> Result(Option(auth.User), String) {
+  let cookies = request.get_cookies(request)
+
+  case list.key_find(cookies, auth.session_cookie) {
+    Error(Nil) -> Ok(option.None)
+
+    Ok(cookie) -> {
+      case crypto.verify_signed_message(cookie, <<secret_key_base:utf8>>) {
+        Error(Nil) -> Error("could not read session cookie")
+
+        Ok(message) ->
+          bit_array.to_string(message)
+          |> result.replace_error("could not decode session")
+          |> result.try(fn(data) {
+            json.parse(data, auth.session_user_decoder())
+            |> result.replace_error("could not parse session")
+            |> result.map(option.Some)
+          })
+      }
+    }
+  }
 }
 
 fn page_handler(
