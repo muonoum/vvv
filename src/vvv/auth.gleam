@@ -23,6 +23,15 @@ pub type User {
   User(name: String, email: String)
 }
 
+pub type Session {
+  Session(
+    user: User,
+    id_token: Option(String),
+    access_token: Option(String),
+    code_verifier: String,
+  )
+}
+
 pub type Config {
   Config(
     client_id: String,
@@ -72,8 +81,8 @@ fn get_key(key: String) -> Result(String, String) {
 
 fn try_key(
   key: String,
-  into: fn(String) -> Result(a, Nil),
-) -> Result(a, String) {
+  into: fn(String) -> Result(v, Nil),
+) -> Result(v, String) {
   result.try(envoy.get(key), into)
   |> result.replace_error(key)
 }
@@ -109,10 +118,10 @@ fn authorize(config: Config) -> #(Uri, String, State) {
 
   let query =
     uri.query_to_string([
-      #("response_type", config.response_type),
       #("client_id", config.client_id),
       #("redirect_uri", uri.to_string(config.redirect_uri)),
       #("response_mode", config.response_mode),
+      #("response_type", config.response_type),
       #("scope", config.scope),
       #("code_challenge_method", "S256"),
       #("code_challenge", code_challenge),
@@ -133,13 +142,13 @@ fn get_token(
 
   let query =
     uri.query_to_string([
-      #("grant_type", "authorization_code"),
       #("client_id", config.client_id),
       #("client_secret", config.client_secret),
-      #("scope", config.scope),
       #("redirect_uri", uri.to_string(config.redirect_uri)),
+      #("grant_type", "authorization_code"),
       #("code_verifier", code_verifier),
       #("code", code),
+      #("scope", config.scope),
     ])
 
   request
@@ -276,17 +285,17 @@ fn ok_handler(request: wisp.Request, config config: Config) -> wisp.Response {
     Error(Nil) -> #(json.null(), json.null())
 
     Ok(id_token) -> {
-      let assert Ok(user) =
-        ywt.decode(jwt: id_token, using: user_decoder(), keys:, claims: [
-          claim.audience(config.client_id, []),
-          claim.custom("nonce", oauth_state.nonce, json.string, decode.string),
-        ])
-
       // let _ =
       //   echo ywt.decode(jwt: id_token, using: decode.dynamic, keys:, claims: [
       //     claim.audience(config.client_id, []),
       //     claim.custom("nonce", oauth_state.nonce, json.string, decode.string),
       //   ])
+
+      let assert Ok(user) =
+        ywt.decode(jwt: id_token, using: user_decoder(), keys:, claims: [
+          claim.audience(config.client_id, []),
+          claim.custom("nonce", oauth_state.nonce, json.string, decode.string),
+        ])
 
       #(json.string(id_token), encode_user(user))
     }
@@ -319,8 +328,8 @@ fn ok_handler(request: wisp.Request, config config: Config) -> wisp.Response {
     value: json.object([
       #("user", user),
       #("id_token", id_token),
-      #("code_verifier", json.string(oauth_state.code_verifier)),
       #("access_token", access_token),
+      #("code_verifier", json.string(oauth_state.code_verifier)),
     ]),
   )
 }
@@ -354,18 +363,15 @@ fn user_decoder() -> Decoder(User) {
   decode.success(User(name:, email:))
 }
 
-pub fn session_user_decoder() -> Decoder(User) {
-  decode.at(["user"], user_decoder())
-}
+pub fn session_decoder() {
+  use user <- decode.field("user", user_decoder())
+  use id_token <- decode.field("id_token", decode.optional(decode.string))
 
-pub fn session_id_token_decoder() -> Decoder(String) {
-  decode.at(["id_token"], decode.string)
-}
+  use access_token <- decode.field(
+    "access_token",
+    decode.optional(decode.string),
+  )
 
-pub fn session_access_token_decoder() -> Decoder(String) {
-  decode.at(["access_token"], decode.string)
-}
-
-pub fn session_code_verifier_decoder() -> Decoder(String) {
-  decode.at(["code_verifier"], decode.string)
+  use code_verifier <- decode.field("code_verifier", decode.string)
+  decode.success(Session(user:, id_token:, code_verifier:, access_token:))
 }

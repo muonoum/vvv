@@ -69,9 +69,9 @@ fn get_user(
           bit_array.to_string(message)
           |> result.replace_error("could not decode session")
           |> result.try(fn(data) {
-            json.parse(data, auth.session_user_decoder())
+            json.parse(data, auth.session_decoder())
             |> result.replace_error("could not parse session")
-            |> result.map(option.Some)
+            |> result.map(fn(session) { option.Some(session.user) })
           })
       }
     }
