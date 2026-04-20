@@ -268,8 +268,7 @@ fn ok_handler(request: wisp.Request, config config: Config) -> wisp.Response {
     let assert Ok(response) =
       httpc.send(request.set_body(request, option.None), [])
 
-    entra.set_key_algorithm(response.body)
-    |> result.unwrap(response.body)
+    entra.set_missing_key_algorithm(response.body)
     |> json.parse_bits(verify_key.set_decoder())
   }
 
