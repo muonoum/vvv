@@ -39,11 +39,11 @@ fn view(model: Model) -> Element(Message) {
     ]
 
     Ok(option.Some(user)) -> [
-      html.div([], [
-        element.text(user.name <> "—" <> user.email),
-      ]),
       html.a([attribute.class("underline"), attribute.href("/auth/logout")], [
         element.text("logout"),
+      ]),
+      html.div([], [
+        element.text(user.name <> "—" <> user.email),
       ]),
     ]
 
