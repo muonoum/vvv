@@ -220,11 +220,11 @@ fn callback_handler(request) -> wisp.Response {
       let required = [#("state", state)]
       let id_token = list.key_find(form_data.values, "id_token")
       let code = list.key_find(form_data.values, "code")
-      let optional = [#("id_token", id_token), #("code", code)]
+      let options = [#("id_token", id_token), #("code", code)]
 
       let query =
         uri.query_to_string({
-          use all, #(key, option) <- list.fold(optional, required)
+          use all, #(key, option) <- list.fold(options, required)
 
           result.map(option, fn(value) { [#(key, value), ..all] })
           |> result.unwrap(all)
