@@ -113,7 +113,7 @@ pub fn router(
 
     http.Get, ["logout"] -> logout_handler(request)
     http.Post, ["callback"] -> callback_handler(request)
-    http.Get, ["ok"] -> ok_handler(request, config:)
+    http.Get, ["finalize"] -> finalize_handler(request, config:)
     _method, _segments -> wisp.not_found()
   }
 }
@@ -230,14 +230,17 @@ fn callback_handler(request) -> wisp.Response {
           |> result.unwrap(all)
         })
 
-      let uri = uri.Uri(..uri.empty, path: "/auth/ok", query: Some(query))
+      let uri = uri.Uri(..uri.empty, path: "/auth/finalize", query: Some(query))
       wisp.redirect(uri.to_string(uri))
     }
   }
 }
 
-fn ok_handler(request: wisp.Request, config config: Config) -> wisp.Response {
-  case ok_decoder(request:, config:) {
+fn finalize_handler(
+  request: wisp.Request,
+  config config: Config,
+) -> wisp.Response {
+  case finalize_decoder(request:, config:) {
     Ok(#(login, session)) ->
       wisp.redirect(login.return_path)
       |> put_session(
@@ -253,7 +256,7 @@ fn ok_handler(request: wisp.Request, config config: Config) -> wisp.Response {
   }
 }
 
-fn ok_decoder(
+fn finalize_decoder(
   request request: wisp.Request,
   config config: Config,
 ) -> Result(#(Login, Session), Report(Error)) {
