@@ -145,8 +145,8 @@ fn authorize(config: Config, return_path: String) -> #(Uri, Login) {
 
 fn get_token(
   config: Config,
-  code_verifier code_verifier: String,
   code code: String,
+  code_verifier code_verifier: String,
 ) -> Result(Request(String), Nil) {
   use request <- result.try(request.from_uri(config.token_uri))
 
@@ -341,7 +341,7 @@ fn get_access_token(
   login: Login,
 ) -> Result(String, Report(Error)) {
   use request <- result.try(
-    get_token(config, code_verifier: login.code_verifier, code:)
+    get_token(config, code:, code_verifier: login.code_verifier)
     |> report.replace_error(ErrorMessage(
       "could not create access token request",
     )),
