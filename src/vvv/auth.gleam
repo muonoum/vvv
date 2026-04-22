@@ -326,7 +326,7 @@ fn get_signing_keys(
   use response <- result.try(
     httpc.send(request.set_body(request, None), [])
     |> report.map_error(HttpError)
-    |> report.error_context(ErrorMessage("request for signing keys")),
+    |> report.error_context(ErrorMessage("request for signing keys failed")),
   )
 
   entra.set_missing_key_algorithm(response.body)
