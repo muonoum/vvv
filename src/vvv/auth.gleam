@@ -268,7 +268,7 @@ fn finalize_decoder(
 
     json.parse(session, login_decoder())
     |> report.map_error(JsonError)
-    |> report.error_context(ErrorMessage("could not parse login state"))
+    |> report.error_context(ErrorMessage("decoding of session failed"))
   })
 
   let query = wisp.get_query(request)
@@ -302,7 +302,7 @@ fn finalize_decoder(
       claim.custom("nonce", login.id_nonce, json.string, decode.string),
     ])
     |> report.map_error(TokenError)
-    |> report.error_context(ErrorMessage("could not decode id token")),
+    |> report.error_context(ErrorMessage("decoding of id token failed")),
   )
 
   use access_token <- result.try({
@@ -326,13 +326,13 @@ fn get_signing_keys(
   use response <- result.try(
     httpc.send(request.set_body(request, None), [])
     |> report.map_error(HttpError)
-    |> report.error_context(ErrorMessage("jwks request failed")),
+    |> report.error_context(ErrorMessage("request for signing keys")),
   )
 
   entra.set_missing_key_algorithm(response.body)
   |> json.parse_bits(verify_key.set_decoder())
   |> report.map_error(JsonError)
-  |> report.error_context(ErrorMessage("jwks decoding failed"))
+  |> report.error_context(ErrorMessage("decoding of signing keys failed"))
 }
 
 fn get_access_token(
@@ -342,9 +342,7 @@ fn get_access_token(
 ) -> Result(String, Report(Error)) {
   use request <- result.try(
     get_token(config, code:, code_verifier: login.code_verifier)
-    |> report.replace_error(ErrorMessage(
-      "could not create access token request",
-    )),
+    |> report.replace_error(ErrorMessage("bad token uri")),
   )
 
   use response <- result.try(
@@ -352,12 +350,12 @@ fn get_access_token(
     |> request.map(Some)
     |> httpc.send([])
     |> report.map_error(HttpError)
-    |> report.error_context(ErrorMessage("access token request failed")),
+    |> report.error_context(ErrorMessage("request for access token failed")),
   )
 
   json.parse_bits(response.body, access_token_decoder())
   |> report.map_error(JsonError)
-  |> report.error_context(ErrorMessage("access token decoding failed"))
+  |> report.error_context(ErrorMessage("decoding of access token failed"))
 }
 
 fn encode_login(login: Login) -> Json {
