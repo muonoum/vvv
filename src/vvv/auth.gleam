@@ -159,11 +159,16 @@ fn login_handler(
 }
 
 fn logout_handler(request: wisp.Request) -> wisp.Response {
+  let return_path =
+    wisp.get_query(request)
+    |> list.key_find("return_path")
+    |> result.unwrap("/")
+
   case wisp.get_cookie(request, session_cookie, wisp.Signed) {
-    Error(Nil) -> wisp.redirect("/")
+    Error(Nil) -> wisp.redirect(return_path)
 
     Ok(..) ->
-      wisp.redirect("/")
+      wisp.redirect(return_path)
       |> wisp.set_cookie(
         request:,
         name: session_cookie,
@@ -181,10 +186,10 @@ fn callback_handler(request) -> wisp.Response {
     Error(Nil) -> wisp.bad_request("state not found")
 
     Ok(state) -> {
-      let code = list.key_find(form_data.values, "code")
       let id_token = list.key_find(form_data.values, "id_token")
-      let options = [#("id_token", id_token), #("code", code)]
+      let code = list.key_find(form_data.values, "code")
       let required = [#("state", state)]
+      let options = [#("id_token", id_token), #("code", code)]
 
       let query =
         uri.query_to_string({
