@@ -12,6 +12,7 @@ import mist
 import vvv/app
 import vvv/auth
 import vvv/router
+import vvv/store
 import wisp
 import wisp/wisp_mist
 
@@ -29,6 +30,10 @@ pub fn main() -> Nil {
 
   let assert Ok(auth_config) = auth.configure_from_environment()
 
+  let store_name = process.new_name("store")
+  let store = process.named_subject(store_name)
+  let store_spec = store.supervised(store_name)
+
   let app_name = process.new_name("app")
 
   let app_spec =
@@ -38,9 +43,9 @@ pub fn main() -> Nil {
     |> factory.supervised
 
   let server_spec =
-    router.service(_, auth_config, static_handler())
+    router.service(_, auth_config:, store:, static: static_handler())
     |> wisp_mist.handler(secret_key_base)
-    |> router.component_router(secret_key_base, app_name)
+    |> router.component_router(app: app_name, store:, secret_key_base:)
     |> mist.new
     |> mist.bind(http_address)
     |> mist.port(http_port)
@@ -49,6 +54,7 @@ pub fn main() -> Nil {
   let assert Ok(_) =
     supervisor.start({
       supervisor.new(supervisor.OneForOne)
+      |> supervisor.add(store_spec)
       |> supervisor.add(app_spec)
       |> supervisor.add(server_spec)
     })

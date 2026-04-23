@@ -10,3 +10,7 @@ pub fn hash(string: String) -> String {
   crypto.hash(crypto.Sha256, <<string:utf8>>)
   |> bit_array.base64_url_encode(False)
 }
+
+pub fn return(wrap: fn(a) -> b, body: fn() -> a) -> b {
+  wrap(body())
+}
