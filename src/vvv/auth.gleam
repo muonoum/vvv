@@ -212,8 +212,8 @@ fn finalize_handler(
   store store: process.Subject(store.Message),
 ) -> wisp.Response {
   case finalize_decoder(request:, config:, store:) {
-    Ok(#(login, session_id, session)) -> {
-      store.put(store, session_id, encode_session(session))
+    Ok(#(id, login, session)) -> {
+      store.put(store, id, encode_session(session))
       wisp.redirect(login.return_path)
     }
 
@@ -228,15 +228,15 @@ fn finalize_decoder(
   request request: wisp.Request,
   config config: Config,
   store store: process.Subject(store.Message),
-) -> Result(#(Login, String, Session), Report(Error)) {
-  use session_id <- result.try(
+) -> Result(#(String, Login, Session), Report(Error)) {
+  use id <- result.try(
     wisp.get_cookie(request:, name: session_cookie, security: wisp.Signed)
     |> report.replace_error(ErrorMessage("session cookie not found")),
   )
 
   use login <- result.try({
     use session <- result.try(
-      store.get(store, session_id)
+      store.get(store, id)
       |> report.replace_error(ErrorMessage("session not found")),
     )
 
@@ -248,13 +248,13 @@ fn finalize_decoder(
 
   let query = wisp.get_query(request)
 
-  use received_state <- result.try(
+  use state <- result.try(
     list.key_find(query, "state")
     |> report.replace_error(ErrorMessage("state parameter not fond")),
   )
 
   use <- bool.guard(
-    !crypto.secure_compare(<<login.state:utf8>>, <<received_state:utf8>>),
+    !crypto.secure_compare(<<login.state:utf8>>, <<state:utf8>>),
     report.error(ErrorMessage("state parameter mismatch")),
   )
 
@@ -270,7 +270,7 @@ fn finalize_decoder(
   )
 
   use user <- result.try(
-    ywt.decode(jwt: id_token, using: user_decoder(), keys:, claims: [
+    ywt.decode(jwt: id_token, using: id_token_decoder(), keys:, claims: [
       claim.audience(config.client_id, []),
       claim.custom("nonce", login.id_nonce, json.string, decode.string),
     ])
@@ -290,7 +290,7 @@ fn finalize_decoder(
   let session =
     Session(user:, id_token:, access_token:, code_verifier: login.code_verifier)
 
-  Ok(#(login, session_id, session))
+  Ok(#(id, login, session))
 }
 
 fn get_signing_keys(
@@ -391,14 +391,14 @@ fn login_decoder() -> Decoder(Login) {
 }
 
 pub fn session_decoder() -> Decoder(Session) {
-  use user <- decode.field("user", user_decoder())
+  use user <- decode.field("user", id_token_decoder())
   use id_token <- decode.field("id_token", decode.string)
   use access_token <- decode.field("access_token", decode.string)
   use code_verifier <- decode.field("code_verifier", decode.string)
   decode.success(Session(user:, code_verifier:, id_token:, access_token:))
 }
 
-fn user_decoder() -> Decoder(User) {
+fn id_token_decoder() -> Decoder(User) {
   use name <- decode.field("name", decode.string)
   use email <- decode.field("email", decode.string)
   decode.success(User(name:, email:))
