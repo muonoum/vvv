@@ -4,7 +4,7 @@ import gleam/json
 import gleam/option
 import gleam/result
 import gleam/string
-import wisp
+import logging
 
 // https://learn.microsoft.com/en-us/entra/identity-platform/v2-oauth2-auth-code-flow
 
@@ -13,7 +13,8 @@ import wisp
 pub fn set_missing_key_algorithm(data: BitArray) -> BitArray {
   try_update(data)
   |> result.try_recover(fn(error) {
-    wisp.log_warning(
+    logging.log(
+      logging.Warning,
       "Could not update key algorithm: " <> string.inspect(error),
     )
 
@@ -58,7 +59,8 @@ fn update_rsa_key(
 
   let algorithm =
     option.lazy_unwrap(algorithm, fn() {
-      wisp.log_warning(
+      logging.log(
+        logging.Warning,
         "Setting missing 'alg' field to 'RS256' for '" <> key_id <> "'",
       )
 

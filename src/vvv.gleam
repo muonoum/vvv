@@ -1,78 +1,209 @@
 import envoy
+import ewe
 import filepath
 import gleam/erlang/application
 import gleam/erlang/process
 import gleam/function
+import gleam/http
+import gleam/http/request
+import gleam/http/response
 import gleam/int
-import gleam/otp/factory_supervisor as factory
-import gleam/otp/static_supervisor as supervisor
+import gleam/json
+import gleam/otp/static_supervisor
 import gleam/result
-import lustre
-import mist
-import vvv/app
+import gleam/string
+import logging
+import lustre/attribute
+import lustre/element.{type Element}
+import lustre/element/html
 import vvv/auth
-import vvv/router
-import vvv/store
-import wisp
-import wisp/wisp_mist
+import vvv/extra
+import vvv/session
+import vvv/state.{type State}
+import vvv/web
 
 pub fn main() -> Nil {
-  wisp.configure_logger()
+  logging.configure()
+  logging.set_level(logging.Debug)
 
-  let http_address = envoy.get("HTTP_ADDRESS") |> result.unwrap("localhost")
-  let assert Ok(http_port) = envoy.get("HTTP_PORT") |> result.try(int.parse)
+  let http_address =
+    envoy.get("HTTP_ADDRESS")
+    |> result.unwrap("localhost")
+
+  let assert Ok(http_port) =
+    envoy.get("HTTP_PORT")
+    |> result.try(int.parse)
     as "HTTP_PORT"
 
-  let secret_key_base = {
-    use <- result.lazy_unwrap(envoy.get("SECRET_KEY_BASE"))
-    wisp.random_string(64)
+  let signing_key = {
+    use <- result.lazy_unwrap(envoy.get("SIGNING_KEY"))
+    extra.random_string(64)
   }
 
+  let static_handler = static_handler()
   let assert Ok(auth_config) = auth.configure_from_environment()
 
-  let store_name = process.new_name("store")
-  let store = process.named_subject(store_name)
-  let store_spec = store.supervised(store_name)
-
-  let app_name = process.new_name("app")
-
-  let app_spec =
-    app.component()
-    |> lustre.factory
-    |> factory.named(app_name)
-    |> factory.supervised
-
   let server_spec =
-    router.service(_, auth_config:, store:, static: static_handler())
-    |> wisp_mist.handler(secret_key_base)
-    |> router.component_router(app: app_name, store:, secret_key_base:)
-    |> mist.new
-    |> mist.bind(http_address)
-    |> mist.port(http_port)
-    |> mist.supervised
+    ewe.new(router(_, static_handler, auth_config, signing_key))
+    |> ewe.bind(http_address)
+    |> ewe.listening(http_port)
+    |> ewe.supervised
 
   let assert Ok(_) =
-    supervisor.start({
-      supervisor.new(supervisor.OneForOne)
-      |> supervisor.add(store_spec)
-      |> supervisor.add(app_spec)
-      |> supervisor.add(server_spec)
+    static_supervisor.start({
+      static_supervisor.new(static_supervisor.OneForOne)
+      |> static_supervisor.add(server_spec)
     })
 
   process.sleep_forever()
 }
 
-fn static_handler() -> fn(wisp.Request, fn() -> wisp.Response) -> wisp.Response {
-  let assert Ok(priv_directory) = application.priv_directory("vvv")
-  let app = filepath.join(priv_directory, "static")
+fn router(
+  request: web.Request,
+  static_handler: fn(web.Request, fn() -> web.Response) -> web.Response,
+  auth_config: auth.Config,
+  signing_key: String,
+) -> web.Response {
+  use <- static_handler(request)
 
-  let assert Ok(lustre) =
+  let session = session.run(
+    request,
+    cookie: "vvv",
+    store: session.cookie_store(),
+    signing_key:,
+    handler: _,
+  )
+
+  case request.method, request.path_segments(request) {
+    http.Get, [] -> {
+      use <- session
+      page_handler(title: "vvv", csrf_token: "TODO", csp_nonce: "TODO")
+    }
+
+    http.Get, ["auth", "login"] -> {
+      use <- session
+      auth.login_handler(request, auth_config)
+    }
+
+    http.Get, ["auth", "logout"] -> {
+      use <- session
+      auth.logout_handler(request)
+    }
+
+    http.Post, ["auth", "callback"] -> auth.callback_handler(request)
+
+    http.Get, ["auth", "finalize"] -> {
+      use <- session
+      auth.finalize_handler(request, auth_config)
+    }
+
+    _method, _segments ->
+      response.new(404)
+      |> web.text_body("Not Found")
+  }
+}
+
+fn page_handler(
+  title _title: String,
+  csrf_token csrf_token: String,
+  csp_nonce csp_nonce: String,
+) -> State(web.Response, session.Context) {
+  use number <- state.bind(session.get("number"))
+
+  let number =
+    result.try(number, int.parse)
+    |> result.unwrap(0)
+    |> int.add(1)
+    |> int.to_string
+
+  use <- state.do(session.put("number", number))
+  use page <- state.bind(page(page_title: number, csrf_token:, csp_nonce:))
+
+  state.return(
+    response.new(200)
+    |> response.set_header("content-type", "text/html; charset=utf-8")
+    |> response.set_body(
+      ewe.StringTreeData(element.to_document_string_tree(page)),
+    ),
+  )
+}
+
+fn page(
+  page_title page_title: String,
+  csrf_token csrf_token: String,
+  csp_nonce csp_nonce: String,
+) -> State(Element(message), session.Context) {
+  use auth <- state.bind(session.get("auth"))
+  use <- extra.return(state.return)
+
+  let auth = case auth {
+    Error(Nil) -> element.none()
+
+    Ok(auth) ->
+      case json.parse(auth, auth.session_decoder()) {
+        Error(error) -> element.text(string.inspect(error))
+
+        Ok(auth.Session(user:, ..)) ->
+          element.text(user.name <> "—" <> user.email)
+      }
+  }
+
+  html.html([], [
+    html.head([], [
+      html.title([], page_title),
+      html.meta([attribute.charset("utf-8")]),
+      html.meta([attribute.name("csrf-token"), attribute.content(csrf_token)]),
+      html.meta([
+        attribute.name("viewport"),
+        attribute.content("width=device-width,initial-scale=1"),
+      ]),
+      html.link([attribute.rel("stylesheet"), attribute.href("/app.css")]),
+      html.script(
+        [
+          attribute.type_("module"),
+          attribute.src("/lustre/lustre-server-component.mjs"),
+          attribute.nonce(csp_nonce),
+        ],
+        "",
+      ),
+    ]),
+    html.body([], [
+      html.div([attribute.class("flex gap-2 p-4")], [
+        html.a([attribute.class("underline"), attribute.href("/auth/login")], [
+          element.text("login"),
+        ]),
+        html.a([attribute.class("underline"), attribute.href("/auth/logout")], [
+          element.text("logout"),
+        ]),
+        html.div([], [auth]),
+      ]),
+    ]),
+  ])
+}
+
+fn static_handler() -> fn(web.Request, fn() -> web.Response) -> web.Response {
+  let assert Ok(app_static) =
+    application.priv_directory("vvv")
+    |> result.map(filepath.join(_, "static"))
+    as "app/static"
+
+  let assert Ok(lustre_static) =
     application.priv_directory("lustre")
     |> result.map(filepath.join(_, "static"))
     as "lustre/static"
 
-  use request, next <- function.identity
-  use <- wisp.serve_static(request, under: "/", from: app)
-  use <- wisp.serve_static(request, under: "/lustre", from: lustre)
-  next()
+  let app_assets = web.load_assets(app_static)
+  let lustre_assets = web.load_assets(lustre_static)
+
+  use request: web.Request, next: fn() -> web.Response <- function.identity
+
+  case request.method, request.path_segments(request) {
+    http.Get, ["lustre", ..segments] ->
+      web.serve_assets(lustre_assets, request:, segments:, next:)
+
+    http.Get, segments ->
+      web.serve_assets(app_assets, request:, segments:, next:)
+
+    _method, _segments -> next()
+  }
 }

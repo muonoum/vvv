@@ -5,6 +5,13 @@ import lustre/effect.{type Effect}
 import lustre/element.{type Element}
 import lustre/element/html
 import vvv/auth
+import vvv/component
+
+type Argument =
+  Result(Option(auth.User), String)
+
+pub type Component =
+  component.Name(Argument, Message)
 
 pub type App =
   lustre.App(Result(Option(auth.User), String), Model, Message)

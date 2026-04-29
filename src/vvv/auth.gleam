@@ -3,26 +3,26 @@ import gleam/bool
 import gleam/bytes_tree
 import gleam/crypto
 import gleam/dynamic/decode.{type Decoder}
-import gleam/erlang/process
 import gleam/http
 import gleam/http/request.{type Request}
+import gleam/http/response
 import gleam/json.{type Json}
 import gleam/list
-import gleam/option.{None, Some}
+import gleam/option
 import gleam/result
 import gleam/string
 import gleam/uri.{type Uri, Uri}
+import logging
 import vvv/entra
 import vvv/extra
 import vvv/httpc
 import vvv/report.{type Report}
-import vvv/store
-import wisp
+import vvv/session
+import vvv/state.{type State}
+import vvv/web
 import ywt
 import ywt/claim
 import ywt/verify_key.{type VerifyKey}
-
-pub const session_cookie: String = "vvv-session"
 
 pub type Config {
   Config(
@@ -98,31 +98,14 @@ fn try_key(
   |> result.replace_error(key)
 }
 
-pub fn router(
-  request: wisp.Request,
-  config config: Config,
-  store store: process.Subject(store.Message),
-  segments segments: List(String),
-) -> wisp.Response {
-  case request.method, segments {
-    http.Get, ["login"] -> login_handler(request, config:, store:)
-    http.Get, ["logout"] -> logout_handler(request)
-    http.Post, ["callback"] -> callback_handler(request)
-    http.Get, ["finalize"] -> finalize_handler(request, config:, store:)
-    _method, _segments -> wisp.not_found()
-  }
-}
-
-fn login_handler(
-  request: wisp.Request,
-  config config: Config,
-  store store: process.Subject(store.Message),
-) -> wisp.Response {
-  let session_id = extra.random(32)
-  let state = extra.random(32)
-  let code_verifier = extra.random(32)
-  let code_challenge = extra.hash(code_verifier)
-  let id_nonce = extra.random(32)
+pub fn login_handler(
+  request: web.Request,
+  config: Config,
+) -> State(web.Response, session.Context) {
+  let state = extra.random_string(32)
+  let code_verifier = extra.random_string(32)
+  let code_challenge = extra.hash_string(code_verifier)
+  let id_nonce = extra.random_string(32)
 
   let query =
     uri.query_to_string([
@@ -138,58 +121,50 @@ fn login_handler(
     ])
 
   let return_path =
-    wisp.get_query(request)
+    request.get_query(request)
+    |> result.unwrap([])
     |> list.key_find("return_path")
     |> result.unwrap("/")
 
-  let authorize_uri = Uri(..config.authorize_uri, query: Some(query))
+  let authorize_uri = Uri(..config.authorize_uri, query: option.Some(query))
   let login = Login(id_nonce:, state:, code_verifier:, return_path:)
-
-  store.put(store, session_id, encode_login(login))
+  use <- state.do(session.put("auth", json.to_string(encode_login(login))))
 
   uri.to_string(authorize_uri)
-  |> wisp.redirect
-  |> wisp.set_cookie(
-    request:,
-    name: session_cookie,
-    value: session_id,
-    security: wisp.Signed,
-    max_age: 60,
-  )
+  |> response.redirect
+  |> web.empty_body
+  |> state.return
 }
 
-fn logout_handler(request: wisp.Request) -> wisp.Response {
+pub fn logout_handler(
+  request: web.Request,
+) -> State(web.Response, session.Context) {
   let return_path =
-    wisp.get_query(request)
+    request.get_query(request)
+    |> result.unwrap([])
     |> list.key_find("return_path")
     |> result.unwrap("/")
 
-  case wisp.get_cookie(request, session_cookie, wisp.Signed) {
-    Error(Nil) -> wisp.redirect(return_path)
+  use <- state.do(session.delete("auth"))
 
-    Ok(..) ->
-      wisp.redirect(return_path)
-      |> wisp.set_cookie(
-        request:,
-        name: session_cookie,
-        value: "",
-        security: wisp.Signed,
-        max_age: 0,
-      )
-  }
+  response.redirect(return_path)
+  |> web.empty_body
+  |> state.return
 }
 
-fn callback_handler(request) -> wisp.Response {
-  use form_data <- wisp.require_form(request)
+pub fn callback_handler(request) -> web.Response {
+  use form_data <- web.form_data(request)
 
-  case list.key_find(form_data.values, "state") {
-    Error(Nil) -> wisp.bad_request("state not found")
+  case list.key_find(form_data, "state") {
+    Error(Nil) ->
+      response.new(400)
+      |> web.text_body("Bad Request")
 
     Ok(state) -> {
-      let id_token = list.key_find(form_data.values, "id_token")
-      let code = list.key_find(form_data.values, "code")
+      let code = list.key_find(form_data, "code")
+      let id_token = list.key_find(form_data, "id_token")
+      let options = [#("code", code), #("id_token", id_token)]
       let required = [#("state", state)]
-      let options = [#("id_token", id_token), #("code", code)]
 
       let query =
         uri.query_to_string({
@@ -199,54 +174,67 @@ fn callback_handler(request) -> wisp.Response {
           |> result.unwrap(all)
         })
 
-      uri.Uri(..uri.empty, path: "/auth/finalize", query: Some(query))
+      uri.Uri(..uri.empty, path: "/auth/finalize", query: option.Some(query))
       |> uri.to_string
-      |> wisp.redirect
+      |> response.redirect
+      |> web.empty_body
     }
   }
 }
 
-fn finalize_handler(
-  request: wisp.Request,
-  config config: Config,
-  store store: process.Subject(store.Message),
-) -> wisp.Response {
-  case finalize_decoder(request:, config:, store:) {
-    Ok(#(id, login, session)) -> {
-      store.put(store, id, encode_session(session))
-      wisp.redirect(login.return_path)
+pub fn finalize_handler(
+  request: web.Request,
+  config: Config,
+) -> State(web.Response, session.Context) {
+  use session <- state.bind(session.get("auth"))
+
+  case session {
+    Error(Nil) -> {
+      logging.log(logging.Error, "login session not found")
+
+      response.new(400)
+      |> web.text_body("Bad Request")
+      |> state.return
     }
 
-    // TODO
-    Error(report) ->
-      string.inspect(report)
-      |> wisp.bad_request
+    Ok(session) ->
+      case finalize_decoder(request:, config:, session:) {
+        Ok(#(login, session)) -> {
+          use <- state.do({
+            session.put("auth", json.to_string(encode_session(session)))
+          })
+
+          response.redirect(login.return_path)
+          |> web.empty_body
+          |> state.return
+        }
+
+        // TODO
+        Error(report) -> {
+          logging.log(logging.Error, string.inspect(report))
+
+          response.new(400)
+          |> web.text_body("Bad Request")
+          |> state.return
+        }
+      }
   }
 }
 
 fn finalize_decoder(
-  request request: wisp.Request,
+  request request: web.Request,
   config config: Config,
-  store store: process.Subject(store.Message),
-) -> Result(#(String, Login, Session), Report(Error)) {
-  use id <- result.try(
-    wisp.get_cookie(request:, name: session_cookie, security: wisp.Signed)
-    |> report.replace_error(ErrorMessage("session cookie not found")),
-  )
+  session session: String,
+) -> Result(#(Login, Session), Report(Error)) {
+  let query =
+    request.get_query(request)
+    |> result.unwrap([])
 
   use login <- result.try({
-    use session <- result.try(
-      store.get(store, id)
-      |> report.replace_error(ErrorMessage("session not found")),
-    )
-
-    json.to_string(session)
-    |> json.parse(login_decoder())
+    json.parse(session, login_decoder())
     |> report.map_error(JsonError)
     |> report.error_context(ErrorMessage("decoding of session failed"))
   })
-
-  let query = wisp.get_query(request)
 
   use state <- result.try(
     list.key_find(query, "state")
@@ -254,7 +242,7 @@ fn finalize_decoder(
   )
 
   use <- bool.guard(
-    !crypto.secure_compare(<<login.state:utf8>>, <<state:utf8>>),
+    !crypto.secure_compare(<<state:utf8>>, <<login.state:utf8>>),
     report.error(ErrorMessage("state parameter mismatch")),
   )
 
@@ -279,25 +267,22 @@ fn finalize_decoder(
   )
 
   use access_token <- result.try({
-    use code <- result.try(
-      list.key_find(query, "code")
-      |> report.replace_error(ErrorMessage("code parameter not found")),
-    )
-
-    get_access_token(code:, config:, login:)
+    list.key_find(query, "code")
+    |> report.replace_error(ErrorMessage("code parameter not found"))
+    |> result.try(get_access_token(code: _, config:, login:))
   })
 
   let session =
     Session(user:, id_token:, access_token:, code_verifier: login.code_verifier)
 
-  Ok(#(id, login, session))
+  Ok(#(login, session))
 }
 
 fn get_signing_keys(
   request: Request(_),
 ) -> Result(List(VerifyKey), Report(Error)) {
   use response <- result.try(
-    httpc.send(request.set_body(request, None), [])
+    httpc.send(request.set_body(request, option.None), [])
     |> report.map_error(HttpError)
     |> report.error_context(ErrorMessage("request for signing keys failed")),
   )
@@ -338,7 +323,7 @@ fn get_access_token(
 
   use response <- result.try(
     request.map(request, bytes_tree.from_string)
-    |> request.map(Some)
+    |> request.map(option.Some)
     |> httpc.send([])
     |> report.map_error(HttpError)
     |> report.error_context(ErrorMessage("request for access token failed")),
