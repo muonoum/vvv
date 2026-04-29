@@ -64,6 +64,8 @@ fn router(
   auth_config: auth.Config,
   signing_key: String,
 ) -> web.Response {
+  use <- web.rescue
+  use <- web.log_request(request)
   use <- static_handler(request)
 
   let session = session.run(
@@ -108,16 +110,7 @@ fn page_handler(
   csrf_token csrf_token: String,
   csp_nonce csp_nonce: String,
 ) -> State(web.Response, session.Context) {
-  use number <- state.bind(session.get("number"))
-
-  let number =
-    result.try(number, int.parse)
-    |> result.unwrap(0)
-    |> int.add(1)
-    |> int.to_string
-
-  use <- state.do(session.put("number", number))
-  use page <- state.bind(page(page_title: number, csrf_token:, csp_nonce:))
+  use page <- state.bind(page(page_title: "vvv", csrf_token:, csp_nonce:))
 
   state.return(
     response.new(200)
@@ -133,10 +126,11 @@ fn page(
   csrf_token csrf_token: String,
   csp_nonce csp_nonce: String,
 ) -> State(Element(message), session.Context) {
-  use auth <- state.bind(session.get("auth"))
+  use login <- state.bind(session.get("login"))
+  use login_status <- state.bind(session.get_flash("status"))
   use <- extra.return(state.return)
 
-  let auth = case auth {
+  let user = case login {
     Error(Nil) -> element.none()
 
     Ok(auth) ->
@@ -175,7 +169,15 @@ fn page(
         html.a([attribute.class("underline"), attribute.href("/auth/logout")], [
           element.text("logout"),
         ]),
-        html.div([], [auth]),
+        html.div([], [user]),
+        case login_status {
+          Error(Nil) -> element.none()
+
+          Ok(message) ->
+            html.div([attribute.class("font-bold text-green-700")], [
+              element.text(message),
+            ])
+        },
       ]),
     ]),
   ])

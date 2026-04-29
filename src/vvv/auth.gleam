@@ -128,7 +128,7 @@ pub fn login_handler(
 
   let authorize_uri = Uri(..config.authorize_uri, query: option.Some(query))
   let login = Login(id_nonce:, state:, code_verifier:, return_path:)
-  use <- state.do(session.put("auth", json.to_string(encode_login(login))))
+  use <- state.do(session.put("login", json.to_string(encode_login(login))))
 
   uri.to_string(authorize_uri)
   |> response.redirect
@@ -145,7 +145,7 @@ pub fn logout_handler(
     |> list.key_find("return_path")
     |> result.unwrap("/")
 
-  use <- state.do(session.delete("auth"))
+  use <- state.do(session.delete("login"))
 
   response.redirect(return_path)
   |> web.empty_body
@@ -186,7 +186,7 @@ pub fn finalize_handler(
   request: web.Request,
   config: Config,
 ) -> State(web.Response, session.Context) {
-  use session <- state.bind(session.get("auth"))
+  use session <- state.bind(session.get("login"))
 
   case session {
     Error(Nil) -> {
@@ -201,8 +201,10 @@ pub fn finalize_handler(
       case finalize_decoder(request:, config:, session:) {
         Ok(#(login, session)) -> {
           use <- state.do({
-            session.put("auth", json.to_string(encode_session(session)))
+            session.put("login", json.to_string(encode_session(session)))
           })
+
+          use <- state.do(session.put_flash("status", "login ok"))
 
           response.redirect(login.return_path)
           |> web.empty_body

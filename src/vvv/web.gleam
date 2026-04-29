@@ -1,11 +1,14 @@
 import ewe
+import exception
 import filepath
 import gleam/bit_array
 import gleam/bool
 import gleam/crypto
 import gleam/dict.{type Dict}
+import gleam/http
 import gleam/http/request
 import gleam/http/response
+import gleam/int
 import gleam/list
 import gleam/result
 import gleam/string
@@ -20,6 +23,44 @@ pub type Request =
 
 pub type Response =
   response.Response(ewe.ResponseBody)
+
+@external(erlang, "timer", "tc")
+fn time(fun: fn() -> a) -> #(Int, a)
+
+pub fn log_request(request: Request, handler: fn() -> Response) -> Response {
+  let #(elapsed, response) = time(handler)
+
+  let elapsed = case elapsed {
+    n if n >= 1000 -> int.to_string(elapsed / 1000) <> "ms"
+    _else -> int.to_string(elapsed) <> "µs"
+  }
+
+  logging.log(
+    logging.Info,
+    elapsed
+      <> " "
+      <> int.to_string(response.status)
+      <> " "
+      <> http.method_to_string(request.method)
+      <> " "
+      <> request.path,
+  )
+
+  response
+}
+
+pub fn rescue(handler: fn() -> Response) -> Response {
+  case exception.rescue(handler) {
+    Ok(response) -> response
+
+    Error(error) -> {
+      logging.log(logging.Error, string.inspect(error))
+
+      response.new(500)
+      |> response.set_body(ewe.TextData("Internal Server Error"))
+    }
+  }
+}
 
 pub fn text_body(response: response.Response(v), text: String) -> Response {
   response.set_body(response, ewe.TextData(text))
