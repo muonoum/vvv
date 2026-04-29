@@ -1,16 +1,14 @@
-import gleam/bytes_tree
+import ewe
 import gleam/erlang/process
-import gleam/http/request.{type Request}
-import gleam/http/response.{type Response}
+import gleam/http/response
 import gleam/json
-import gleam/option.{type Option, Some}
 import gleam/otp/actor
 import gleam/otp/factory_supervisor as factory
 import gleam/string
+import logging
 import lustre
 import lustre/server_component as server
-import mist
-import wisp
+import vvv/web
 
 pub type Name(argument, message) =
   process.Name(
@@ -18,10 +16,10 @@ pub type Name(argument, message) =
   )
 
 pub fn start(
-  request: Request(mist.Connection),
+  request: web.Request,
   name: Name(argument, message),
   argument: argument,
-) -> Response(mist.ResponseData) {
+) -> web.Response {
   let supervisor = factory.get_by_name(name)
 
   case factory.start_child(supervisor, argument) {
@@ -29,65 +27,71 @@ pub fn start(
 
     Error(error) -> {
       let message = ["Server component", request.path, string.inspect(error)]
-      wisp.log_error(string.join(message, ": "))
+      logging.log(logging.Error, string.join(message, ": "))
 
       response.new(500)
-      |> response.set_body(mist.Bytes(bytes_tree.new()))
+      |> web.text_body("Internal Server Error")
     }
   }
 }
 
 pub fn service(
-  request: Request(mist.Connection),
+  request: web.Request,
   component: process.Subject(lustre.RuntimeMessage(message)),
-) -> Response(mist.ResponseData) {
-  let on_init = on_init(_, request, component)
-  mist.websocket(request:, on_init:, on_close:, handler:)
+) -> web.Response {
+  let on_init = fn(connection, selector) {
+    on_init(connection, selector, request, component)
+  }
+
+  ewe.upgrade_websocket(request, on_init:, handler:, on_close:)
 }
 
 type State(message) {
   State(
-    request: Request(mist.Connection),
+    request: web.Request,
     component: process.Subject(lustre.RuntimeMessage(message)),
     subject: process.Subject(server.ClientMessage(message)),
   )
 }
 
 fn on_init(
-  _connection: mist.WebsocketConnection,
-  request: Request(mist.Connection),
+  _connection: ewe.WebsocketConnection,
+  selector,
+  request: web.Request,
   component: process.Subject(lustre.RuntimeMessage(message)),
-) -> #(State(message), Option(process.Selector(server.ClientMessage(message)))) {
-  wisp.log_info("Join " <> request.path)
+) -> #(State(message), process.Selector(server.ClientMessage(message))) {
+  logging.log(logging.Info, "Join " <> request.path)
 
   let subject = process.new_subject()
-  let selector = process.new_selector() |> process.select(subject)
+  let selector = process.select(selector, subject)
   process.send(component, server.register_subject(subject))
-  #(State(request:, component:, subject:), Some(selector))
+  #(State(request:, component:, subject:), selector)
 }
 
-fn on_close(state: State(message)) -> Nil {
-  wisp.log_info("Leave " <> state.request.path)
+fn on_close(
+  _connection: ewe.WebsocketConnection,
+  state: State(message),
+) -> Nil {
+  logging.log(logging.Info, "Leave " <> state.request.path)
   process.send(state.component, lustre.shutdown())
 }
 
 fn handler(
+  connection: ewe.WebsocketConnection,
   state: State(message),
-  message: mist.WebsocketMessage(server.ClientMessage(message)),
-  connection: mist.WebsocketConnection,
-) -> mist.Next(State(message), server.ClientMessage(message)) {
+  message: ewe.WebsocketMessage(server.ClientMessage(message)),
+) -> ewe.WebsocketNext(State(message), server.ClientMessage(message)) {
   case message {
-    mist.Closed | mist.Shutdown -> mist.stop()
-    mist.Binary(_) -> mist.continue(state)
-    mist.Text(text) -> runtime_message(text, state)
-    mist.Custom(message) -> client_message(connection, message, state)
+    ewe.Binary(_) -> ewe.websocket_continue(state)
+    ewe.Text(text) -> runtime_message(text, state)
+    ewe.User(message) -> client_message(connection, message, state)
   }
 }
 
 fn runtime_message(
   text: String,
   state: State(message),
-) -> mist.Next(State(message), server.ClientMessage(message)) {
+) -> ewe.WebsocketNext(State(message), server.ClientMessage(message)) {
   case json.parse(text, server.runtime_message_decoder()) {
     Ok(message) -> process.send(state.component, message)
 
@@ -99,13 +103,13 @@ fn runtime_message(
       ])
   }
 
-  mist.continue(state)
+  ewe.websocket_continue(state)
 }
 
 fn client_message(connection, message, state: State(message)) {
   let json = json.to_string(server.client_message_to_json(message))
 
-  case mist.send_text_frame(connection, json) {
+  case ewe.send_text_frame(connection, json) {
     Ok(Nil) -> Nil
 
     Error(error) ->
@@ -116,9 +120,9 @@ fn client_message(connection, message, state: State(message)) {
       ])
   }
 
-  mist.continue(state)
+  ewe.websocket_continue(state)
 }
 
 fn log_error(parts: List(String)) -> Nil {
-  wisp.log_error(string.join(parts, ": "))
+  logging.log(logging.Error, string.join(parts, ": "))
 }

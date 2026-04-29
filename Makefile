@@ -1,11 +1,11 @@
 watch := watchexec --clear --quiet --restart --stop-signal INT --stop-timeout 150ms --watch .restart
 
 .PHONY: dev
-dev:
+dev: .restart
 	$(watch) make run --no-print-directory
 
 .PHONY: dev-env
-dev-env:
+dev-env: .restart
 	test -n "$(env)"
 	$(watch) "source $(env) && make run --no-print-directory"
 
