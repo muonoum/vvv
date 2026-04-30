@@ -1,8 +1,6 @@
 -module(glue).
 -export([configure_proxy/3, request/4, request/6]).
 
-%% httpc
-
 configure_proxy(Host, Port, Exceptions) ->
     Host2 = binary_to_list(Host),
     Exceptions2 = [binary_to_list(H) || H <- Exceptions],
