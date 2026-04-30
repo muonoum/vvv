@@ -24,6 +24,15 @@ pub type Request =
 pub type Response =
   response.Response(ewe.ResponseBody)
 
+pub type Asset {
+  Asset(
+    relative_path: String,
+    full_path: String,
+    content_type: String,
+    hash: String,
+  )
+}
+
 @external(erlang, "timer", "tc")
 fn time(fun: fn() -> a) -> #(Int, a)
 
@@ -100,15 +109,6 @@ pub fn string_data(request: Request, next: fn(String) -> Response) -> Response {
           |> text_body("Bad Request")
       }
   }
-}
-
-pub type Asset {
-  Asset(
-    relative_path: String,
-    full_path: String,
-    content_type: String,
-    hash: String,
-  )
 }
 
 pub fn load_assets(base: String) -> Dict(List(String), Asset) {

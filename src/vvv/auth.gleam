@@ -169,9 +169,9 @@ pub fn callback_handler(request) -> web.Response {
       let query =
         uri.query_to_string({
           use all, #(key, option) <- list.fold(options, required)
-
-          result.map(option, fn(value) { [#(key, value), ..all] })
-          |> result.unwrap(all)
+          use <- extra.return(result.unwrap(_, all))
+          use value <- result.map(option)
+          [#(key, value), ..all]
         })
 
       uri.Uri(..uri.empty, path: "/auth/finalize", query: option.Some(query))
@@ -201,7 +201,9 @@ pub fn finalize_handler(
       case finalize_decoder(request:, config:, session:) {
         Ok(#(login, session)) -> {
           use <- state.do({
-            session.put("login", json.to_string(encode_session(session)))
+            encode_session(session)
+            |> json.to_string
+            |> session.put("login", _)
           })
 
           use <- state.do(session.put_flash("status", "login ok"))
