@@ -2,45 +2,25 @@ import gleam/bit_array
 import gleam/bool
 import gleam/crypto
 import gleam/dict.{type Dict}
-import gleam/dynamic/decode.{type Decoder}
-import gleam/function
 import gleam/http
 import gleam/http/cookie
 import gleam/http/request
 import gleam/http/response
-import gleam/json
 import gleam/list
 import gleam/option
 import gleam/result
-import gleam/string
-import logging
 import vvv/extra
-import vvv/state.{type State}
+import vvv/state
 import vvv/web
 
 // TODO: Regenerate id
-pub opaque type Context {
-  Context(value: String, data: Data, next_flash: Dict(String, String))
-}
-
-fn context_changed(a: Context, b: Context) -> Bool {
-  a.data != b.data || a.data.flash != b.next_flash
-}
-
-type Data {
-  Data(user: Dict(String, String), flash: Dict(String, String))
-}
-
-pub opaque type Store {
-  Store(load: fn(String) -> Data, save: fn(Context) -> String)
-}
 
 pub fn run(
   request: web.Request,
   cookie cookie_name: String,
   store store: Store,
   signing_key signing_key: String,
-  handler handler: fn() -> State(web.Response, Context),
+  handler handler: fn() -> State(web.Response),
 ) -> web.Response {
   let value =
     request.get_cookies(request)
@@ -52,19 +32,23 @@ pub fn run(
     Error(Nil) ->
       Context(
         value: extra.random_string(32),
-        data: Data(user: dict.new(), flash: dict.new()),
+        user_data: dict.new(),
+        flash: dict.new(),
         next_flash: dict.new(),
       )
 
     Ok(value) -> {
-      let data = store.load(value)
-      Context(value:, data:, next_flash: dict.new())
+      let Data(user:, flash:) = store.load(value)
+      Context(value:, user_data: user, flash:, next_flash: dict.new())
     }
   }
 
   let #(response, context2) = state.run(handler(), context1)
-  use <- bool.guard(!context_changed(context1, context2), response)
-  let value = store.save(context2)
+  use <- bool.guard(!changed(context1, context2), response)
+
+  let value =
+    Data(user: context2.user_data, flash: context2.next_flash)
+    |> store.save
 
   response.set_cookie(
     response,
@@ -74,66 +58,86 @@ pub fn run(
   )
 }
 
-pub fn get(key: String) -> State(Result(String, Nil), Context) {
-  use Context(data:, ..) <- state.bind(state.get())
-  state.return(dict.get(data.user, key))
+// STORE
+
+pub opaque type Store {
+  Store(load: fn(String) -> Data, save: fn(Data) -> String)
 }
 
-pub fn delete(key: String) -> State(Nil, Context) {
-  use Context(data:, ..) as ctx <- state.update
-  let data = Data(..data, user: dict.delete(data.user, key))
-  Context(..ctx, data:)
+pub fn store(
+  load load: fn(String) -> Data,
+  save save: fn(Data) -> String,
+) -> Store {
+  Store(load:, save:)
 }
 
-pub fn put(key: String, value: String) -> State(Nil, Context) {
-  use Context(data:, ..) as ctx <- state.update()
-  let data = Data(..data, user: dict.insert(data.user, key, value))
-  Context(..ctx, data:)
+// CONTEXT
+
+pub opaque type Context {
+  Context(
+    value: String,
+    user_data: Dict(String, String),
+    flash: Dict(String, String),
+    next_flash: Dict(String, String),
+  )
 }
 
-pub fn get_flash(key: String) -> State(Result(String, Nil), Context) {
-  use Context(data:, ..) <- state.bind(state.get())
-  state.return(dict.get(data.flash, key))
+fn changed(a: Context, b: Context) -> Bool {
+  a.user_data != b.user_data || a.flash != b.next_flash
 }
 
-pub fn delete_flash(key: String) -> State(Nil, Context) {
+// DATA
+
+pub opaque type Data {
+  Data(user: Dict(String, String), flash: Dict(String, String))
+}
+
+pub fn data(
+  user user: Dict(String, String),
+  flash flash: Dict(String, String),
+) -> Data {
+  Data(user:, flash:)
+}
+
+pub fn user_data(data: Data) -> Dict(String, String) {
+  data.user
+}
+
+pub fn flash_data(data: Data) -> Dict(String, String) {
+  data.flash
+}
+
+// STATE
+
+pub type State(v) =
+  state.State(v, Context)
+
+pub fn get(key: String) -> State(Result(String, Nil)) {
+  use Context(user_data:, ..) <- state.bind(state.get())
+  state.return(dict.get(user_data, key))
+}
+
+pub fn delete(key: String) -> State(Nil) {
+  use Context(user_data:, ..) as ctx <- state.update
+  Context(..ctx, user_data: dict.delete(user_data, key))
+}
+
+pub fn put(key: String, value: String) -> State(Nil) {
+  use Context(user_data:, ..) as ctx <- state.update()
+  Context(..ctx, user_data: dict.insert(user_data, key, value))
+}
+
+pub fn get_flash(key: String) -> State(Result(String, Nil)) {
+  use Context(flash:, ..) <- state.bind(state.get())
+  state.return(dict.get(flash, key))
+}
+
+pub fn delete_flash(key: String) -> State(Nil) {
   use Context(next_flash:, ..) as ctx <- state.update
   Context(..ctx, next_flash: dict.delete(next_flash, key))
 }
 
-pub fn put_flash(key: String, value: String) -> State(Nil, Context) {
+pub fn put_flash(key: String, value: String) -> State(Nil) {
   use Context(next_flash:, ..) as ctx <- state.update()
   Context(..ctx, next_flash: dict.insert(next_flash, key, value))
-}
-
-// COOKIE
-
-pub fn cookie_store() -> Store {
-  Store(load: load_cookie, save: save_cookie)
-}
-
-fn load_cookie(value: String) -> Data {
-  use <- result.lazy_unwrap(parse_cookie(value))
-  Data(user: dict.new(), flash: dict.new())
-}
-
-fn parse_cookie(value: String) -> Result(Data, Nil) {
-  use error <- result.try_recover(json.parse(value, cookie_decoder()))
-  logging.log(logging.Warning, string.inspect(error))
-  Error(Nil)
-}
-
-fn cookie_decoder() -> Decoder(Data) {
-  use user <- decode.field("user", decode.dict(decode.string, decode.string))
-  use flash <- decode.field("flash", decode.dict(decode.string, decode.string))
-  decode.success(Data(user:, flash:))
-}
-
-fn save_cookie(context: Context) -> String {
-  json.to_string(
-    json.object([
-      #("user", json.dict(context.data.user, function.identity, json.string)),
-      #("flash", json.dict(context.next_flash, function.identity, json.string)),
-    ]),
-  )
 }

@@ -23,10 +23,11 @@ import lustre/server_component
 import vvv/app
 import vvv/auth
 import vvv/component
+import vvv/cookie_store
 import vvv/extra
 import vvv/page
 import vvv/session
-import vvv/state.{type State}
+import vvv/state
 import vvv/web
 
 pub fn main() -> Nil {
@@ -87,7 +88,7 @@ fn router(
   let session = session.run(
     request,
     cookie: "vvv",
-    store: session.cookie_store(),
+    store: cookie_store.new(),
     signing_key:,
     handler: _,
   )
@@ -128,7 +129,7 @@ fn router(
   }
 }
 
-fn get_login() -> State(#(page.User, page.Status), session.Context) {
+fn get_login() -> session.State(#(page.User, page.Status)) {
   use login <- state.bind(session.get("login"))
   use status <- state.bind(session.get_flash("status"))
 
@@ -149,7 +150,7 @@ fn page_handler(
   title _title: String,
   csrf_token csrf_token: String,
   csp_nonce csp_nonce: String,
-) -> State(web.Response, session.Context) {
+) -> session.State(web.Response) {
   use document <- state.bind(document(title: "vvv", csrf_token:, csp_nonce:))
 
   state.return(
@@ -165,7 +166,7 @@ fn document(
   title title: String,
   csrf_token csrf_token: String,
   csp_nonce csp_nonce: String,
-) -> State(Element(message), session.Context) {
+) -> session.State(Element(message)) {
   use #(user, status) <- state.bind(get_login())
   use <- extra.return(state.return)
 

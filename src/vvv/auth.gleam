@@ -18,7 +18,7 @@ import vvv/extra
 import vvv/httpc
 import vvv/report.{type Report}
 import vvv/session
-import vvv/state.{type State}
+import vvv/state
 import vvv/web
 import ywt
 import ywt/claim
@@ -101,7 +101,7 @@ fn try_key(
 pub fn login_handler(
   request: web.Request,
   config: Config,
-) -> State(web.Response, session.Context) {
+) -> session.State(web.Response) {
   let state = extra.random_string(32)
   let code_verifier = extra.random_string(32)
   let code_challenge = extra.hash_string(code_verifier)
@@ -136,9 +136,7 @@ pub fn login_handler(
   |> state.return
 }
 
-pub fn logout_handler(
-  request: web.Request,
-) -> State(web.Response, session.Context) {
+pub fn logout_handler(request: web.Request) -> session.State(web.Response) {
   let return_path =
     request.get_query(request)
     |> result.unwrap([])
@@ -185,7 +183,7 @@ pub fn callback_handler(request) -> web.Response {
 pub fn finalize_handler(
   request: web.Request,
   config: Config,
-) -> State(web.Response, session.Context) {
+) -> session.State(web.Response) {
   use session <- state.bind(session.get("login"))
 
   case session {
