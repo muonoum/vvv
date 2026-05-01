@@ -71,6 +71,18 @@ pub fn rescue(handler: fn() -> Response) -> Response {
   }
 }
 
+pub fn csp_nonce(handler: fn(String) -> Response) -> Response {
+  let nonce = extra.random_string(24)
+
+  let header =
+    "script-src 'nonce-"
+    <> nonce
+    <> "' 'strict-dynamic'; object-src 'none'; base-uri 'none'"
+
+  handler(nonce)
+  |> response.set_header("content-security-policy", header)
+}
+
 pub fn text_body(response: response.Response(v), text: String) -> Response {
   response.set_body(response, ewe.TextData(text))
 }

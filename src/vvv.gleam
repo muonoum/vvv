@@ -94,8 +94,9 @@ fn router(
 
   case request.method, request.path_segments(request) {
     http.Get, [] -> {
+      use csp_nonce <- web.csp_nonce()
       use <- session
-      page_handler(title: "vvv", csrf_token: "TODO", csp_nonce: "TODO")
+      page_handler(title: "vvv", csrf_token: "TODO", csp_nonce:)
     }
 
     http.Get, ["auth", "login"] -> {
