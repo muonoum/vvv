@@ -150,13 +150,13 @@ fn page_handler(
   csrf_token csrf_token: String,
   csp_nonce csp_nonce: String,
 ) -> State(web.Response, session.Context) {
-  use page <- state.bind(document(title: "vvv", csrf_token:, csp_nonce:))
+  use document <- state.bind(document(title: "vvv", csrf_token:, csp_nonce:))
 
   state.return(
     response.new(200)
     |> response.set_header("content-type", "text/html; charset=utf-8")
     |> response.set_body(
-      ewe.StringTreeData(element.to_document_string_tree(page)),
+      ewe.StringTreeData(element.to_document_string_tree(document)),
     ),
   )
 }
