@@ -153,7 +153,7 @@ pub fn logout_handler(
 }
 
 pub fn callback_handler(request) -> web.Response {
-  use form_data <- web.form_data(request)
+  use form_data <- web.form_data(request, bytes_limit: 4096)
 
   case list.key_find(form_data, "state") {
     Error(Nil) ->

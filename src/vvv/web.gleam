@@ -81,9 +81,10 @@ pub fn empty_body(response: response.Response(v)) -> Response {
 
 pub fn form_data(
   request: Request,
-  next: fn(List(#(String, String))) -> Response,
+  bytes_limit bytes_limit: Int,
+  next next: fn(List(#(String, String))) -> Response,
 ) -> Response {
-  use body <- string_data(request)
+  use body <- string_data(request, bytes_limit:)
 
   case uri.parse_query(body) {
     Ok(pairs) -> next(pairs)
@@ -94,8 +95,12 @@ pub fn form_data(
   }
 }
 
-pub fn string_data(request: Request, next: fn(String) -> Response) -> Response {
-  case ewe.read_body(request, 4096) {
+pub fn string_data(
+  request: Request,
+  bytes_limit bytes_limit: Int,
+  next next: fn(String) -> Response,
+) -> Response {
+  case ewe.read_body(request, bytes_limit:) {
     Error(..) ->
       response.new(400)
       |> text_body("Bad Request")
