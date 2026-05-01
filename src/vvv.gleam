@@ -211,7 +211,6 @@ fn static_handler() -> fn(web.Request, fn() -> web.Response) -> web.Response {
 
   let app_assets = web.load_assets(app_static)
   let lustre_assets = web.load_assets(lustre_static)
-
   use request: web.Request, next: fn() -> web.Response <- function.identity
 
   case request.method, request.path_segments(request) {
