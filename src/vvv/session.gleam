@@ -23,8 +23,8 @@ pub opaque type Context {
   Context(value: String, data: Data, next_flash: Dict(String, String))
 }
 
-fn context_unchanged(a: Context, b: Context) -> Bool {
-  a.data == b.data && a.data.flash == b.next_flash
+fn context_changed(a: Context, b: Context) -> Bool {
+  a.data != b.data || a.data.flash != b.next_flash
 }
 
 type Data {
@@ -63,7 +63,7 @@ pub fn run(
   }
 
   let #(response, context2) = state.run(handler(), context1)
-  use <- bool.guard(context_unchanged(context1, context2), response)
+  use <- bool.guard(!context_changed(context1, context2), response)
   let value = store.save(context2)
 
   response.set_cookie(
