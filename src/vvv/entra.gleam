@@ -6,8 +6,6 @@ import gleam/result
 import gleam/string
 import logging
 
-// https://learn.microsoft.com/en-us/entra/identity-platform/v2-oauth2-auth-code-flow
-
 // HACK: `ywt/verify_key.set_decoder` krever 'alg', men Entra setter ikke dette
 // feltet på nøklene sine
 pub fn set_missing_key_algorithm(data: BitArray) -> BitArray {
@@ -57,15 +55,16 @@ fn update_rsa_key(
     decode.map(decode.string, option.Some),
   )
 
-  let algorithm =
-    option.lazy_unwrap(algorithm, fn() {
-      logging.log(
-        logging.Warning,
-        "Setting missing 'alg' field to 'RS256' for '" <> key_id <> "'",
-      )
+  let algorithm = {
+    use <- option.lazy_unwrap(algorithm)
 
-      "RS256"
-    })
+    logging.log(
+      logging.Warning,
+      "Setting missing 'alg' field to 'RS256' for '" <> key_id <> "'",
+    )
+
+    "RS256"
+  }
 
   decode.success([
     #("kid", json.string(key_id)),
