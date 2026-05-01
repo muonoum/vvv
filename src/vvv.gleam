@@ -9,15 +9,22 @@ import gleam/http/request
 import gleam/http/response
 import gleam/int
 import gleam/json
+import gleam/option.{type Option}
+import gleam/otp/factory_supervisor
 import gleam/otp/static_supervisor
 import gleam/result
 import gleam/string
 import logging
+import lustre
 import lustre/attribute
 import lustre/element.{type Element}
 import lustre/element/html
+import lustre/server_component
+import vvv/app
 import vvv/auth
+import vvv/component
 import vvv/extra
+import vvv/page
 import vvv/session
 import vvv/state.{type State}
 import vvv/web
@@ -40,11 +47,18 @@ pub fn main() -> Nil {
     extra.random_string(64)
   }
 
+  let app_name = process.new_name("app")
+
+  let app_spec =
+    lustre.factory(app.component())
+    |> factory_supervisor.named(app_name)
+    |> factory_supervisor.supervised
+
   let static_handler = static_handler()
   let assert Ok(auth_config) = auth.configure_from_environment()
 
   let server_spec =
-    ewe.new(router(_, static_handler, auth_config, signing_key))
+    ewe.new(router(_, app_name, static_handler, auth_config, signing_key))
     |> ewe.bind(http_address)
     |> ewe.listening(http_port)
     |> ewe.supervised
@@ -53,6 +67,7 @@ pub fn main() -> Nil {
     static_supervisor.start({
       static_supervisor.new(static_supervisor.OneForOne)
       |> static_supervisor.add(server_spec)
+      |> static_supervisor.add(app_spec)
     })
 
   process.sleep_forever()
@@ -60,6 +75,7 @@ pub fn main() -> Nil {
 
 fn router(
   request: web.Request,
+  app: app.Component,
   static_handler: fn(web.Request, fn() -> web.Response) -> web.Response,
   auth_config: auth.Config,
   signing_key: String,
@@ -99,10 +115,36 @@ fn router(
       auth.finalize_handler(request, auth_config)
     }
 
+    http.Get, ["components", "app"] -> {
+      use <- session
+      use #(user, _status) <- state.bind(get_login())
+      state.return(component.start(request, app, user))
+    }
+
     _method, _segments ->
       response.new(404)
       |> web.text_body("Not Found")
   }
+}
+
+fn get_login() -> State(
+  #(Result(Option(auth.User), String), Result(String, Nil)),
+  session.Context,
+) {
+  use login <- state.bind(session.get("login"))
+  use status <- state.bind(session.get_flash("status"))
+
+  let user = case login {
+    Error(Nil) -> Ok(option.None)
+
+    Ok(auth) ->
+      case json.parse(auth, auth.session_decoder()) {
+        Error(error) -> Error(string.inspect(error))
+        Ok(auth.Session(user:, ..)) -> Ok(option.Some(user))
+      }
+  }
+
+  state.return(#(user, status))
 }
 
 fn page_handler(
@@ -126,21 +168,8 @@ fn page(
   csrf_token csrf_token: String,
   csp_nonce csp_nonce: String,
 ) -> State(Element(message), session.Context) {
-  use login <- state.bind(session.get("login"))
-  use login_status <- state.bind(session.get_flash("status"))
+  use #(user, status) <- state.bind(get_login())
   use <- extra.return(state.return)
-
-  let user = case login {
-    Error(Nil) -> element.none()
-
-    Ok(auth) ->
-      case json.parse(auth, auth.session_decoder()) {
-        Error(error) -> element.text(string.inspect(error))
-
-        Ok(auth.Session(user:, ..)) ->
-          element.text(user.name <> "—" <> user.email)
-      }
-  }
 
   html.html([], [
     html.head([], [
@@ -162,23 +191,8 @@ fn page(
       ),
     ]),
     html.body([], [
-      html.div([attribute.class("flex gap-2 p-4")], [
-        html.a([attribute.class("underline"), attribute.href("/auth/login")], [
-          element.text("login"),
-        ]),
-        html.a([attribute.class("underline"), attribute.href("/auth/logout")], [
-          element.text("logout"),
-        ]),
-        html.div([], [user]),
-        case login_status {
-          Error(Nil) -> element.none()
-
-          Ok(message) ->
-            html.div([attribute.class("font-bold text-green-700")], [
-              element.text(message),
-            ])
-        },
-      ]),
+      server_component.element([server_component.route("/components/app")], []),
+      page.view(user, status),
     ]),
   ])
 }
