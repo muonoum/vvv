@@ -150,7 +150,7 @@ fn page_handler(
   csrf_token csrf_token: String,
   csp_nonce csp_nonce: String,
 ) -> State(web.Response, session.Context) {
-  use page <- state.bind(page(page_title: "vvv", csrf_token:, csp_nonce:))
+  use page <- state.bind(document(title: "vvv", csrf_token:, csp_nonce:))
 
   state.return(
     response.new(200)
@@ -161,8 +161,8 @@ fn page_handler(
   )
 }
 
-fn page(
-  page_title page_title: String,
+fn document(
+  title title: String,
   csrf_token csrf_token: String,
   csp_nonce csp_nonce: String,
 ) -> State(Element(message), session.Context) {
@@ -171,7 +171,7 @@ fn page(
 
   html.html([], [
     html.head([], [
-      html.title([], page_title),
+      html.title([], title),
       html.meta([attribute.charset("utf-8")]),
       html.meta([attribute.name("csrf-token"), attribute.content(csrf_token)]),
       html.meta([
