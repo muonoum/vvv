@@ -4,10 +4,13 @@ import lustre/element.{type Element}
 import lustre/element/html
 import vvv/auth
 
-pub fn view(
-  user: Result(Option(auth.User), String),
-  status: Result(String, Nil),
-) -> Element(message) {
+pub type User =
+  Result(Option(auth.User), String)
+
+pub type Status =
+  Result(String, Nil)
+
+pub fn view(user: User, status: Status) -> Element(message) {
   html.div([attribute.class("flex gap-2 p-4")], case user {
     Error(message) -> [
       login(),
@@ -37,7 +40,7 @@ fn logout() -> Element(message) {
   ])
 }
 
-fn login_status(status: Result(String, Nil)) -> Element(message) {
+fn login_status(status: Status) -> Element(message) {
   case status {
     Error(Nil) -> element.none()
 

@@ -9,7 +9,7 @@ import gleam/http/request
 import gleam/http/response
 import gleam/int
 import gleam/json
-import gleam/option.{type Option}
+import gleam/option
 import gleam/otp/factory_supervisor
 import gleam/otp/static_supervisor
 import gleam/result
@@ -128,10 +128,7 @@ fn router(
   }
 }
 
-fn get_login() -> State(
-  #(Result(Option(auth.User), String), Result(String, Nil)),
-  session.Context,
-) {
+fn get_login() -> State(#(page.User, page.Status), session.Context) {
   use login <- state.bind(session.get("login"))
   use status <- state.bind(session.get_flash("status"))
 
