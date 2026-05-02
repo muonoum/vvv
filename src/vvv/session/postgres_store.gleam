@@ -41,10 +41,15 @@ pub fn new(connection: pog.Connection) -> session.Store {
 }
 
 pub fn setup(connection: pog.Connection) -> Nil {
-  // TODO
-  let assert Ok(_) =
+  let result =
     pog.query(create_table)
     |> pog.execute(connection)
+
+  // TODO: Feil type for count --> pog.Returned(Table, [])
+  case result {
+    Error(error) -> logging.log(logging.Error, string.inspect(error))
+    Ok(pog.Returned(..)) -> Nil
+  }
 
   Nil
 }
@@ -60,8 +65,9 @@ fn load(connection: pog.Connection) -> fn(String) -> session.Data {
 
   case result {
     Ok(pog.Returned(rows: [data], ..)) -> data
+    Ok(pog.Returned(rows: [], ..)) -> session.empty_data()
 
-    Ok(unexpected) -> {
+    Ok(pog.Returned(..) as unexpected) -> {
       logging.log(logging.Warning, string.inspect(unexpected))
       session.empty_data()
     }
@@ -93,12 +99,19 @@ fn parse_value(value: String) -> Result(session.Data, json.DecodeError) {
 fn save(connection: pog.Connection) -> fn(String, session.Data) -> String {
   use id: String, data: session.Data <- function.identity
 
-  // TODO
-  let assert Ok(_) =
+  let result =
     pog.query(save_session)
     |> pog.parameter(pog.text(id))
     |> pog.parameter(pog.text(session.json_data(data)))
     |> pog.execute(connection)
+
+  case result {
+    Error(error) -> logging.log(logging.Error, string.inspect(error))
+    Ok(pog.Returned(count: 1, rows: [])) -> Nil
+
+    Ok(pog.Returned(..) as unexpected) ->
+      logging.log(logging.Error, string.inspect(unexpected))
+  }
 
   id
 }
