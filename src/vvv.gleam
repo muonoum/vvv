@@ -50,6 +50,9 @@ pub fn main() -> Nil {
     extra.random_string(64)
   }
 
+  let supervisor = static_supervisor.new(static_supervisor.OneForOne)
+  let #(session_store, supervisor) = configure_sessions(supervisor)
+
   let app = process.new_name("app")
 
   let app_spec =
@@ -58,15 +61,6 @@ pub fn main() -> Nil {
     |> factory_supervisor.supervised
 
   let assert Ok(auth_config) = auth.configure_from_environment()
-
-  let store_name = process.new_name("store")
-  let store_spec = store.supervised(store_name)
-
-  let session_store =
-    process.named_subject(store_name)
-    |> actor_store.new
-
-  let _session_store = cookie_store.new()
 
   let handler =
     router(
@@ -85,13 +79,33 @@ pub fn main() -> Nil {
 
   let assert Ok(_) =
     static_supervisor.start({
-      static_supervisor.new(static_supervisor.OneForOne)
-      |> static_supervisor.add(store_spec)
-      |> static_supervisor.add(server_spec)
+      supervisor
       |> static_supervisor.add(app_spec)
+      |> static_supervisor.add(server_spec)
     })
 
   process.sleep_forever()
+}
+
+fn configure_sessions(
+  supervisor: static_supervisor.Builder,
+) -> #(session.Store, static_supervisor.Builder) {
+  case envoy.get("SESSION_STORE") {
+    Ok("cookie") -> #(cookie_store.new(), supervisor)
+
+    Ok("actor") -> {
+      let store_name = process.new_name("store")
+      let store_spec = store.supervised(store_name)
+
+      let session_store =
+        process.named_subject(store_name)
+        |> actor_store.new
+
+      #(session_store, static_supervisor.add(supervisor, store_spec))
+    }
+
+    Ok(..) | Error(Nil) -> panic as "SESSION_STORE"
+  }
 }
 
 fn router(
