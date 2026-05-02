@@ -2,6 +2,7 @@ import gleam/dynamic/decode
 import gleam/erlang/process
 import gleam/function
 import gleam/json
+import gleam/option.{type Option}
 import gleam/otp/supervision
 import gleam/string
 import logging
@@ -22,10 +23,10 @@ const save_session = "
 
 pub fn supervised(
   name: process.Name(pog.Message),
-  host host,
-  database database,
-  user user,
-  password password,
+  host host: String,
+  database database: String,
+  user user: String,
+  password password: Option(String),
 ) -> supervision.ChildSpecification(pog.Connection) {
   pog.default_config(name)
   |> pog.host(host)
