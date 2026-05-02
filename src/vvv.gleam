@@ -7,13 +7,11 @@ import gleam/function
 import gleam/http
 import gleam/http/request
 import gleam/int
-import gleam/option
-import gleam/otp/factory_supervisor
-import gleam/otp/static_supervisor
+import gleam/otp/factory_supervisor as factory
+import gleam/otp/static_supervisor as supervisor
 import gleam/result
 import logging
 import lustre
-import pog
 import vvv/app
 import vvv/auth
 import vvv/extra
@@ -22,7 +20,6 @@ import vvv/session
 import vvv/session/actor_store
 import vvv/session/cookie_store
 import vvv/session/postgres_store
-import vvv/store
 import vvv/web
 
 pub fn main() -> Nil {
@@ -43,17 +40,17 @@ pub fn main() -> Nil {
     extra.random_string(64)
   }
 
-  let supervisor = static_supervisor.new(static_supervisor.OneForOne)
+  let supervisor = supervisor.new(supervisor.OneForOne)
 
-  let #(session_store, supervisor, initialise_sessions) =
+  let #(session_store, supervisor, initialise_session_store) =
     configure_sessions(supervisor)
 
   let app = process.new_name("app")
 
   let app_spec =
     lustre.factory(app.component())
-    |> factory_supervisor.named(app)
-    |> factory_supervisor.supervised
+    |> factory.named(app)
+    |> factory.supervised
 
   let assert Ok(auth_config) = auth.configure_from_environment()
 
@@ -73,13 +70,13 @@ pub fn main() -> Nil {
     |> ewe.supervised
 
   let assert Ok(_) =
-    static_supervisor.start({
+    supervisor.start({
       supervisor
-      |> static_supervisor.add(app_spec)
-      |> static_supervisor.add(server_spec)
+      |> supervisor.add(app_spec)
+      |> supervisor.add(server_spec)
     })
 
-  case initialise_sessions() {
+  case initialise_session_store() {
     Error(error) -> panic as error
     Ok(Nil) -> Nil
   }
@@ -88,43 +85,12 @@ pub fn main() -> Nil {
 }
 
 fn configure_sessions(
-  supervisor: static_supervisor.Builder,
-) -> #(session.Store, static_supervisor.Builder, fn() -> Result(Nil, String)) {
+  supervisor: supervisor.Builder,
+) -> #(session.Store, supervisor.Builder, fn() -> Result(Nil, String)) {
   case envoy.get("SESSION_STORE") {
     Ok("cookie") -> #(cookie_store.new(), supervisor, fn() { Ok(Nil) })
-
-    Ok("postgres") -> {
-      // TODO
-      let assert Ok(database) = envoy.get("DB_DATABASE") as "DB_DATABASE"
-      let assert Ok(host) = envoy.get("DB_HOST") as "DB_HOST"
-      let assert Ok(user) = envoy.get("DB_USER") as "DB_USER"
-      let password = option.from_result(envoy.get("DB_PASSWORD"))
-
-      let store_name = process.new_name("store")
-
-      let store_spec =
-        postgres_store.supervised(
-          store_name,
-          database:,
-          host:,
-          user:,
-          password:,
-        )
-
-      let connection = pog.named_connection(store_name)
-      let store = postgres_store.new(connection)
-      let supervisor = static_supervisor.add(supervisor, store_spec)
-      #(store, supervisor, fn() { postgres_store.setup(connection) })
-    }
-
-    Ok("actor") -> {
-      let store_name = process.new_name("store")
-      let store_spec = store.supervised(store_name)
-      let store = actor_store.new(process.named_subject(store_name))
-      let supervisor = static_supervisor.add(supervisor, store_spec)
-      #(store, supervisor, fn() { Ok(Nil) })
-    }
-
+    Ok("postgres") -> postgres_store.configure(supervisor)
+    Ok("actor") -> actor_store.configure(supervisor)
     Ok(..) | Error(Nil) -> panic as "SESSION_STORE"
   }
 }

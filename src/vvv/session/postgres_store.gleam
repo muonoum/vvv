@@ -1,8 +1,10 @@
+import envoy
 import gleam/dynamic/decode
 import gleam/erlang/process
 import gleam/function
 import gleam/json
 import gleam/option.{type Option}
+import gleam/otp/static_supervisor as supervisor
 import gleam/otp/supervision
 import gleam/string
 import logging
@@ -21,7 +23,24 @@ const save_session = "
   insert into sessions ( id, data ) values ( $1, $2 ) on conflict ( id ) do update set data = $2;
 "
 
-pub fn supervised(
+pub fn configure(
+  supervisor: supervisor.Builder,
+) -> #(session.Store, supervisor.Builder, fn() -> Result(Nil, String)) {
+  // TODO
+  let assert Ok(database) = envoy.get("DB_DATABASE") as "DB_DATABASE"
+  let assert Ok(host) = envoy.get("DB_HOST") as "DB_HOST"
+  let assert Ok(user) = envoy.get("DB_USER") as "DB_USER"
+  let password = option.from_result(envoy.get("DB_PASSWORD"))
+
+  let naem = process.new_name("store")
+  let spec = supervised(naem, database:, host:, user:, password:)
+  let connection = pog.named_connection(naem)
+  let store = new(connection)
+  let supervisor = supervisor.add(supervisor, spec)
+  #(store, supervisor, fn() { setup(connection) })
+}
+
+fn supervised(
   name: process.Name(pog.Message),
   database database: String,
   host host: String,
@@ -36,11 +55,11 @@ pub fn supervised(
   |> pog.supervised
 }
 
-pub fn new(connection: pog.Connection) -> session.Store {
+fn new(connection: pog.Connection) -> session.Store {
   session.store(load: load(connection), save: save(connection))
 }
 
-pub fn setup(connection: pog.Connection) -> Result(Nil, String) {
+fn setup(connection: pog.Connection) -> Result(Nil, String) {
   let result =
     pog.query(create_table)
     |> pog.execute(connection)
