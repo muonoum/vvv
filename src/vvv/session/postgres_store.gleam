@@ -17,7 +17,7 @@ const load_session = "
 "
 
 const save_session = "
-  insert into sessions ( id, data ) values ( $1, $2 ) on conflict ( id ) do update set data=$2;
+  insert into sessions ( id, data ) values ( $1, $2 ) on conflict ( id ) do update set data = $2;
 "
 
 pub fn supervised(
