@@ -12,24 +12,10 @@ pub fn new() -> session.Store {
 }
 
 fn load(value: String) -> session.Data {
-  use <- result.lazy_unwrap(parse_cookie(value))
-  session.data(user: dict.new(), flash: dict.new())
+  result.lazy_unwrap(parse_value(value), session.empty_data)
 }
 
-fn save(data: session.Data) -> String {
-  json.to_string(
-    json.object([
-      #("user", dict_encoder(session.user_data(data))),
-      #("flash", dict_encoder(session.flash_data(data))),
-    ]),
-  )
-}
-
-fn dict_encoder(dict: Dict(String, String)) -> Json {
-  json.dict(dict, function.identity, json.string)
-}
-
-fn parse_cookie(value: String) -> Result(session.Data, Nil) {
+fn parse_value(value: String) -> Result(session.Data, Nil) {
   use error <- result.try_recover(json.parse(value, cookie_decoder()))
   logging.log(logging.Warning, string.inspect(error))
   Error(Nil)
@@ -43,4 +29,21 @@ fn cookie_decoder() -> Decoder(session.Data) {
 
 fn dict_decoder() -> Decoder(Dict(String, String)) {
   decode.dict(decode.string, decode.string)
+}
+
+fn save(_value: String, data: session.Data) -> String {
+  encode_data(data)
+}
+
+fn encode_data(data: session.Data) -> String {
+  json.to_string(
+    json.object([
+      #("user", encode_dict(session.user_data(data))),
+      #("flash", encode_dict(session.flash_data(data))),
+    ]),
+  )
+}
+
+fn encode_dict(dict: Dict(String, String)) -> Json {
+  json.dict(dict, function.identity, json.string)
 }

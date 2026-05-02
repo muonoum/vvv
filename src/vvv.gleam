@@ -23,11 +23,13 @@ import lustre/server_component
 import vvv/app
 import vvv/auth
 import vvv/component
-import vvv/cookie_store
 import vvv/extra
 import vvv/page
 import vvv/session
+import vvv/session/actor_store
+import vvv/session/cookie_store
 import vvv/state
+import vvv/store
 import vvv/web
 
 pub fn main() -> Nil {
@@ -48,18 +50,35 @@ pub fn main() -> Nil {
     extra.random_string(64)
   }
 
-  let app_name = process.new_name("app")
+  let app = process.new_name("app")
 
   let app_spec =
     lustre.factory(app.component())
-    |> factory_supervisor.named(app_name)
+    |> factory_supervisor.named(app)
     |> factory_supervisor.supervised
 
-  let static_handler = static_handler()
   let assert Ok(auth_config) = auth.configure_from_environment()
 
+  let store_name = process.new_name("store")
+  let store_spec = store.supervised(store_name)
+
+  let session_store =
+    process.named_subject(store_name)
+    |> actor_store.new
+
+  let _session_store = cookie_store.new()
+
+  let handler =
+    router(
+      app:,
+      auth_config:,
+      session_store:,
+      static_handler: static_handler(),
+      signing_key:,
+    )
+
   let server_spec =
-    ewe.new(router(_, app_name, static_handler, auth_config, signing_key))
+    ewe.new(handler)
     |> ewe.bind(http_address)
     |> ewe.listening(http_port)
     |> ewe.supervised
@@ -67,6 +86,7 @@ pub fn main() -> Nil {
   let assert Ok(_) =
     static_supervisor.start({
       static_supervisor.new(static_supervisor.OneForOne)
+      |> static_supervisor.add(store_spec)
       |> static_supervisor.add(server_spec)
       |> static_supervisor.add(app_spec)
     })
@@ -75,20 +95,22 @@ pub fn main() -> Nil {
 }
 
 fn router(
-  request: web.Request,
-  app: app.Component,
-  static_handler: fn(web.Request, fn() -> web.Response) -> web.Response,
-  auth_config: auth.Config,
-  signing_key: String,
-) -> web.Response {
+  app app: app.Component,
+  auth_config auth_config: auth.Config,
+  session_store store: session.Store,
+  static_handler static: fn(web.Request, fn() -> web.Response) -> web.Response,
+  signing_key signing_key: String,
+) -> fn(web.Request) -> web.Response {
+  use request <- function.identity
+
   use <- web.rescue
-  use <- web.log_request(request)
-  use <- static_handler(request)
+  use <- web.log(request)
+  use <- static(request)
 
   let session = session.run(
     request,
+    store:,
     cookie: "vvv",
-    store: cookie_store.new(),
     signing_key:,
     handler: _,
   )

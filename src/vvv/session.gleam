@@ -17,8 +17,8 @@ import vvv/web
 
 pub fn run(
   request: web.Request,
-  cookie cookie_name: String,
   store store: Store,
+  cookie cookie_name: String,
   signing_key signing_key: String,
   handler handler: fn() -> State(web.Response),
 ) -> web.Response {
@@ -47,8 +47,10 @@ pub fn run(
   use <- bool.guard(!changed(context1, context2), response)
 
   let value =
-    Data(user: context2.user_data, flash: context2.next_flash)
-    |> store.save
+    store.save(
+      context2.value,
+      Data(user: context2.user_data, flash: context2.next_flash),
+    )
 
   response.set_cookie(
     response,
@@ -61,35 +63,22 @@ pub fn run(
 // STORE
 
 pub opaque type Store {
-  Store(load: fn(String) -> Data, save: fn(Data) -> String)
+  Store(load: fn(String) -> Data, save: fn(String, Data) -> String)
+}
+
+pub opaque type Data {
+  Data(user: Dict(String, String), flash: Dict(String, String))
 }
 
 pub fn store(
   load load: fn(String) -> Data,
-  save save: fn(Data) -> String,
+  save save: fn(String, Data) -> String,
 ) -> Store {
   Store(load:, save:)
 }
 
-// CONTEXT
-
-pub opaque type Context {
-  Context(
-    value: String,
-    user_data: Dict(String, String),
-    flash: Dict(String, String),
-    next_flash: Dict(String, String),
-  )
-}
-
-fn changed(a: Context, b: Context) -> Bool {
-  a.user_data != b.user_data || a.flash != b.next_flash
-}
-
-// DATA
-
-pub opaque type Data {
-  Data(user: Dict(String, String), flash: Dict(String, String))
+pub fn empty_data() -> Data {
+  Data(user: dict.new(), flash: dict.new())
 }
 
 pub fn data(
@@ -105,6 +94,21 @@ pub fn user_data(data: Data) -> Dict(String, String) {
 
 pub fn flash_data(data: Data) -> Dict(String, String) {
   data.flash
+}
+
+// CONTEXT
+
+pub opaque type Context {
+  Context(
+    value: String,
+    user_data: Dict(String, String),
+    flash: Dict(String, String),
+    next_flash: Dict(String, String),
+  )
+}
+
+fn changed(a: Context, b: Context) -> Bool {
+  a.user_data != b.user_data || a.flash != b.next_flash
 }
 
 // STATE

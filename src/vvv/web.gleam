@@ -36,7 +36,7 @@ pub type Asset {
 @external(erlang, "timer", "tc")
 fn time(fun: fn() -> a) -> #(Int, a)
 
-pub fn log_request(request: Request, handler: fn() -> Response) -> Response {
+pub fn log(request: Request, handler: fn() -> Response) -> Response {
   let #(elapsed, response) = time(handler)
 
   let elapsed = case elapsed {

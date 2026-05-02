@@ -1,6 +1,5 @@
 import gleam/dict.{type Dict}
 import gleam/erlang/process
-import gleam/json.{type Json}
 import gleam/otp/actor
 import gleam/otp/supervision
 
@@ -10,26 +9,29 @@ const call_timeout: Int = 1000
 
 const shutdown_timeout: Int = 1000
 
-pub opaque type Model {
-  Model(state: Dict(String, Json))
+pub type Store(data) =
+  process.Subject(Message(data))
+
+pub opaque type Model(data) {
+  Model(state: Dict(String, data))
 }
 
-pub opaque type Message {
-  Put(subject: process.Subject(Nil), key: String, data: Json)
-  Get(subject: process.Subject(Result(Json, Nil)), key: String)
+pub opaque type Message(data) {
+  Save(key: String, data: data)
+  Load(subject: process.Subject(Result(data, Nil)), key: String)
 }
 
-pub fn put(store: process.Subject(Message), key: String, data: Json) -> Nil {
-  process.call(store, call_timeout, Put(_, key:, data:))
+pub fn save(store: Store(data), key: String, data: data) -> Nil {
+  process.send(store, Save(key:, data:))
 }
 
-pub fn get(store: process.Subject(Message), key: String) -> Result(Json, Nil) {
-  process.call(store, call_timeout, Get(_, key:))
+pub fn load(store: Store(data), key: String) -> Result(data, Nil) {
+  process.call(store, call_timeout, Load(_, key:))
 }
 
 pub fn start(
-  name: process.Name(Message),
-) -> Result(actor.Started(process.Subject(Message)), actor.StartError) {
+  name: process.Name(Message(data)),
+) -> Result(actor.Started(Store(data)), actor.StartError) {
   actor.new_with_initialiser(start_timeout, init)
   |> actor.named(name)
   |> actor.on_message(update)
@@ -37,8 +39,8 @@ pub fn start(
 }
 
 pub fn supervised(
-  name: process.Name(Message),
-) -> supervision.ChildSpecification(process.Subject(Message)) {
+  name: process.Name(Message(data)),
+) -> supervision.ChildSpecification(Store(data)) {
   supervision.ChildSpecification(
     start: fn() { start(name) },
     child_type: supervision.Worker(shutdown_timeout),
@@ -48,25 +50,25 @@ pub fn supervised(
 }
 
 pub fn init(
-  subject: process.Subject(Message),
-) -> Result(actor.Initialised(Model, Message, process.Subject(Message)), String) {
+  subject: Store(data),
+) -> Result(actor.Initialised(Model(data), Message(data), Store(data)), String) {
   Model(state: dict.new())
   |> actor.initialised
   |> actor.returning(subject)
   |> Ok
 }
 
-fn update(model: Model, message: Message) -> actor.Next(Model, Message) {
+fn update(
+  model: Model(data),
+  message: Message(data),
+) -> actor.Next(Model(data), Message(data)) {
   case message {
-    Put(subject:, key:, data:) -> {
-      process.send(subject, Nil)
-
+    Save(key:, data:) ->
       dict.insert(model.state, key, data)
       |> Model(state: _)
       |> actor.continue
-    }
 
-    Get(subject:, key:) -> {
+    Load(subject:, key:) -> {
       dict.get(model.state, key)
       |> process.send(subject, _)
 
