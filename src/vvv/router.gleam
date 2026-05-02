@@ -27,7 +27,6 @@ pub fn service(
   signing_key signing_key: String,
 ) -> fn(web.Request) -> web.Response {
   use request <- function.identity
-
   use <- web.rescue
   use <- web.log(request)
   use <- static(request)
