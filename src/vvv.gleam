@@ -45,7 +45,7 @@ pub fn main() -> Nil {
 
   let supervisor = static_supervisor.new(static_supervisor.OneForOne)
 
-  let #(session_store, supervisor, setup_sessions) =
+  let #(session_store, supervisor, initialise_sessions) =
     configure_sessions(supervisor)
 
   let app = process.new_name("app")
@@ -79,7 +79,7 @@ pub fn main() -> Nil {
       |> static_supervisor.add(server_spec)
     })
 
-  case setup_sessions() {
+  case initialise_sessions() {
     Error(error) -> panic as error
     Ok(Nil) -> Nil
   }

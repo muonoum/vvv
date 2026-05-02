@@ -81,12 +81,12 @@ fn session_decoder() {
   use data <- decode.then(decode.at([0], decode.string))
 
   case parse_value(data) {
+    Ok(data) -> decode.success(data)
+
     Error(error) -> {
       logging.log(logging.Warning, string.inspect(error))
       decode.success(session.empty_data())
     }
-
-    Ok(data) -> decode.success(data)
   }
 }
 
