@@ -89,9 +89,9 @@ fn configure_sessions(
 
     Ok("postgres") -> {
       // TODO
+      let assert Ok(database) = envoy.get("DB_DATABASE") as "DB_DATABASE"
       let assert Ok(host) = envoy.get("DB_HOST") as "DB_HOST"
       let assert Ok(user) = envoy.get("DB_USER") as "DB_USER"
-      let assert Ok(database) = envoy.get("DB_DATABASE") as "DB_DATABASE"
       let password = option.from_result(envoy.get("DB_PASSWORD"))
 
       let store_name = process.new_name("store")
@@ -99,8 +99,8 @@ fn configure_sessions(
       let store_spec =
         postgres_store.supervised(
           store_name,
-          host:,
           database:,
+          host:,
           user:,
           password:,
         )

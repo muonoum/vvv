@@ -23,8 +23,8 @@ const save_session = "
 
 pub fn supervised(
   name: process.Name(pog.Message),
-  host host: String,
   database database: String,
+  host host: String,
   user user: String,
   password password: Option(String),
 ) -> supervision.ChildSpecification(pog.Connection) {
