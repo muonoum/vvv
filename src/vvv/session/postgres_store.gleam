@@ -21,10 +21,6 @@ const save_session = "
   insert into sessions ( id, data ) values ( $1, $2 ) on conflict ( id ) do update set data=$2;
 "
 
-fn log_warning(value: v) -> Nil {
-  logging.log(logging.Warning, "postgres_store: " <> string.inspect(value))
-}
-
 pub fn supervised(
   name: process.Name(pog.Message),
   host host,
@@ -66,12 +62,12 @@ fn load(connection: pog.Connection) -> fn(String) -> session.Data {
     Ok(pog.Returned(rows: [data], ..)) -> data
 
     Ok(unexpected) -> {
-      log_warning(unexpected)
+      logging.log(logging.Warning, string.inspect(unexpected))
       session.empty_data()
     }
 
     Error(error) -> {
-      log_warning(error)
+      logging.log(logging.Warning, string.inspect(error))
       session.empty_data()
     }
   }
@@ -82,7 +78,7 @@ fn session_decoder() {
 
   case parse_value(data) {
     Error(error) -> {
-      log_warning(error)
+      logging.log(logging.Warning, string.inspect(error))
       decode.success(session.empty_data())
     }
 
