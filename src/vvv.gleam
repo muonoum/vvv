@@ -44,7 +44,9 @@ pub fn main() -> Nil {
   }
 
   let supervisor = static_supervisor.new(static_supervisor.OneForOne)
-  let #(session_store, supervisor, setup_store) = configure_sessions(supervisor)
+
+  let #(session_store, supervisor, setup_sessions) =
+    configure_sessions(supervisor)
 
   let app = process.new_name("app")
 
@@ -77,15 +79,19 @@ pub fn main() -> Nil {
       |> static_supervisor.add(server_spec)
     })
 
-  setup_store()
+  case setup_sessions() {
+    Error(error) -> panic as error
+    Ok(Nil) -> Nil
+  }
+
   process.sleep_forever()
 }
 
 fn configure_sessions(
   supervisor: static_supervisor.Builder,
-) -> #(session.Store, static_supervisor.Builder, fn() -> Nil) {
+) -> #(session.Store, static_supervisor.Builder, fn() -> Result(Nil, String)) {
   case envoy.get("SESSION_STORE") {
-    Ok("cookie") -> #(cookie_store.new(), supervisor, fn() { Nil })
+    Ok("cookie") -> #(cookie_store.new(), supervisor, fn() { Ok(Nil) })
 
     Ok("postgres") -> {
       // TODO
@@ -116,7 +122,7 @@ fn configure_sessions(
       let store_spec = store.supervised(store_name)
       let store = actor_store.new(process.named_subject(store_name))
       let supervisor = static_supervisor.add(supervisor, store_spec)
-      #(store, supervisor, fn() { Nil })
+      #(store, supervisor, fn() { Ok(Nil) })
     }
 
     Ok(..) | Error(Nil) -> panic as "SESSION_STORE"

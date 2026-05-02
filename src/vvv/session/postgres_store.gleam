@@ -40,18 +40,16 @@ pub fn new(connection: pog.Connection) -> session.Store {
   session.store(load: load(connection), save: save(connection))
 }
 
-pub fn setup(connection: pog.Connection) -> Nil {
+pub fn setup(connection: pog.Connection) -> Result(Nil, String) {
   let result =
     pog.query(create_table)
     |> pog.execute(connection)
 
-  // TODO: Feil type for count --> pog.Returned(Table, [])
   case result {
-    Error(error) -> logging.log(logging.Error, string.inspect(error))
-    Ok(pog.Returned(..)) -> Nil
+    Error(error) -> Error(string.inspect(error))
+    // TODO: Feil type for count --> pog.Returned(Table, [])
+    Ok(pog.Returned(..)) -> Ok(Nil)
   }
-
-  Nil
 }
 
 fn load(connection: pog.Connection) -> fn(String) -> session.Data {
