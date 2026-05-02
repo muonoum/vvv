@@ -18,6 +18,7 @@ simplifile = ">= 2.4.0 and < 3.0.0"
 ywt_core = ">= 1.2.0 and < 2.0.0"
 ywt_erlang = ">= 1.0.1 and < 2.0.0"
 exception = ">= 2.1.0 and < 3.0.0"
+pog = ">= 4.1.0 and < 5.0.0"
 
 [dev_dependencies]
 gleeunit = ">= 1.0.0 and < 2.0.0"
