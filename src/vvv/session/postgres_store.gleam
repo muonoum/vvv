@@ -1,8 +1,7 @@
-import gleam/dict.{type Dict}
-import gleam/dynamic/decode.{type Decoder}
+import gleam/dynamic/decode
 import gleam/erlang/process
 import gleam/function
-import gleam/json.{type Json}
+import gleam/json
 import gleam/otp/supervision
 import gleam/string
 import logging
@@ -87,17 +86,7 @@ fn session_decoder() {
 }
 
 fn parse_value(value: String) -> Result(session.Data, json.DecodeError) {
-  json.parse(value, cookie_decoder())
-}
-
-fn cookie_decoder() -> Decoder(session.Data) {
-  use user <- decode.field("user", dict_decoder())
-  use flash <- decode.field("flash", dict_decoder())
-  decode.success(session.data(user:, flash:))
-}
-
-fn dict_decoder() -> Decoder(Dict(String, String)) {
-  decode.dict(decode.string, decode.string)
+  json.parse(value, session.data_decoder())
 }
 
 fn save(connection: pog.Connection) -> fn(String, session.Data) -> String {
@@ -107,21 +96,8 @@ fn save(connection: pog.Connection) -> fn(String, session.Data) -> String {
   let assert Ok(_) =
     pog.query(save_session)
     |> pog.parameter(pog.text(id))
-    |> pog.parameter(pog.text(encode_data(data)))
+    |> pog.parameter(pog.text(session.json_data(data)))
     |> pog.execute(connection)
 
   id
-}
-
-fn encode_data(data: session.Data) -> String {
-  json.to_string(
-    json.object([
-      #("user", encode_dict(session.user_data(data))),
-      #("flash", encode_dict(session.flash_data(data))),
-    ]),
-  )
-}
-
-fn encode_dict(dict: Dict(String, String)) -> Json {
-  json.dict(dict, function.identity, json.string)
 }

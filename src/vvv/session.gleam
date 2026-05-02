@@ -2,10 +2,13 @@ import gleam/bit_array
 import gleam/bool
 import gleam/crypto
 import gleam/dict.{type Dict}
+import gleam/dynamic/decode.{type Decoder}
+import gleam/function
 import gleam/http
 import gleam/http/cookie
 import gleam/http/request
 import gleam/http/response
+import gleam/json.{type Json}
 import gleam/list
 import gleam/option
 import gleam/result
@@ -94,6 +97,29 @@ pub fn user_data(data: Data) -> Dict(String, String) {
 
 pub fn flash_data(data: Data) -> Dict(String, String) {
   data.flash
+}
+
+pub fn json_data(data: Data) -> String {
+  json.to_string(
+    json.object([
+      #("user", encode_dict(user_data(data))),
+      #("flash", encode_dict(flash_data(data))),
+    ]),
+  )
+}
+
+fn encode_dict(dict: Dict(String, String)) -> Json {
+  json.dict(dict, function.identity, json.string)
+}
+
+pub fn data_decoder() -> Decoder(Data) {
+  use user <- decode.field("user", dict_decoder())
+  use flash <- decode.field("flash", dict_decoder())
+  decode.success(Data(user:, flash:))
+}
+
+fn dict_decoder() -> Decoder(Dict(String, String)) {
+  decode.dict(decode.string, decode.string)
 }
 
 // CONTEXT
