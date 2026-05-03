@@ -5,6 +5,7 @@ import gleam/function
 import gleam/json
 import gleam/option
 import gleam/otp/static_supervisor as supervisor
+import gleam/result
 import gleam/string
 import logging
 import pog
@@ -13,8 +14,27 @@ import vvv/session
 const create_table = "
   create table if not exists sessions (
     id text primary key,
+    updated_at timestamp without time zone not null,
     data jsonb not null
   );
+"
+
+const create_update_function = "
+  create or replace function update_session()
+  returns trigger
+  language plpgsql
+  as $$
+    begin
+      new.updated_at = now() at time zone 'utc';
+      return new;
+    end;
+  $$;
+"
+
+const create_update_trigger = "
+  create or replace trigger update_session
+  before insert or update on sessions
+  for each row execute function update_session();
 "
 
 const load_session = "
@@ -51,14 +71,30 @@ pub fn new(
 }
 
 fn setup(connection: pog.Connection) -> Result(Nil, String) {
-  let result =
-    pog.query(create_table)
-    |> pog.execute(connection)
+  let result = {
+    use connection <- pog.transaction(connection)
+
+    use _ <- result.try(
+      pog.query(create_table)
+      |> pog.execute(connection),
+    )
+
+    use _ <- result.try(
+      pog.query(create_update_function)
+      |> pog.execute(connection),
+    )
+
+    use _ <- result.try(
+      pog.query(create_update_trigger)
+      |> pog.execute(connection),
+    )
+
+    Ok(Nil)
+  }
 
   case result {
     Error(error) -> Error(string.inspect(error))
-    // TODO: Feil type for count --> pog.Returned(Table, [])
-    Ok(pog.Returned(..)) -> Ok(Nil)
+    Ok(Nil) -> Ok(Nil)
   }
 }
 

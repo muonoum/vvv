@@ -50,10 +50,8 @@ pub fn run(
   use <- bool.guard(!changed(context1, context2), response)
 
   let value =
-    store.save(
-      context2.value,
-      Data(user: context2.user_data, flash: context2.next_flash),
-    )
+    Data(user: context2.user_data, flash: context2.next_flash)
+    |> store.save(context2.value, _)
 
   response.set_cookie(
     response,
