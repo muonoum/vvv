@@ -16,7 +16,6 @@ import vvv/app
 import vvv/auth
 import vvv/extra
 import vvv/router
-import vvv/session
 import vvv/session/actor_store
 import vvv/session/cookie_store
 import vvv/session/postgres_store
@@ -42,8 +41,14 @@ pub fn main() -> Nil {
 
   let supervisor = supervisor.new(supervisor.OneForOne)
 
-  let #(session_store, supervisor, initialise_session_store) =
-    configure_sessions(supervisor)
+  let #(session_store, supervisor, initialise_session_store) = {
+    case envoy.get("SESSION_STORE") {
+      Ok("cookie") -> cookie_store.new(supervisor)
+      Ok("postgres") -> postgres_store.new(supervisor)
+      Ok("actor") -> actor_store.new(supervisor)
+      Ok(..) | Error(Nil) -> panic as "SESSION_STORE"
+    }
+  }
 
   let app = process.new_name("app")
 
@@ -82,17 +87,6 @@ pub fn main() -> Nil {
   }
 
   process.sleep_forever()
-}
-
-fn configure_sessions(
-  supervisor: supervisor.Builder,
-) -> #(session.Store, supervisor.Builder, fn() -> Result(Nil, String)) {
-  case envoy.get("SESSION_STORE") {
-    Ok("cookie") -> #(cookie_store.new(), supervisor, fn() { Ok(Nil) })
-    Ok("postgres") -> postgres_store.configure(supervisor)
-    Ok("actor") -> actor_store.configure(supervisor)
-    Ok(..) | Error(Nil) -> panic as "SESSION_STORE"
-  }
 }
 
 fn static_handler() -> fn(web.Request, fn() -> web.Response) -> web.Response {

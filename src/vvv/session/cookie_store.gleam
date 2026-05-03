@@ -1,11 +1,14 @@
 import gleam/json
+import gleam/otp/static_supervisor as supervisor
 import gleam/result
 import gleam/string
 import logging
 import vvv/session
 
-pub fn new() -> session.Store {
-  session.store(load:, save:)
+pub fn new(
+  supervisor: supervisor.Builder,
+) -> #(session.Store, supervisor.Builder, fn() -> Result(Nil, String)) {
+  #(session.store(load:, save:), supervisor, fn() { Ok(Nil) })
 }
 
 fn load(value: String) -> session.Data {

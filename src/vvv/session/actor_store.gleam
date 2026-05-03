@@ -5,18 +5,14 @@ import gleam/result
 import vvv/session
 import vvv/store.{type Store}
 
-pub fn configure(
+pub fn new(
   supervisor: supervisor.Builder,
 ) -> #(session.Store, supervisor.Builder, fn() -> Result(Nil, a)) {
   let name = process.new_name("store")
-  let spec = store.supervised(name)
-  let store = new(process.named_subject(name))
-  let supervisor = supervisor.add(supervisor, spec)
+  let subject = process.named_subject(name)
+  let store = session.store(load: load(subject), save: save(subject))
+  let supervisor = supervisor.add(supervisor, store.supervised(name))
   #(store, supervisor, fn() { Ok(Nil) })
-}
-
-fn new(store: Store(session.Data)) -> session.Store {
-  session.store(load: load(store), save: save(store))
 }
 
 fn load(store: Store(session.Data)) -> fn(String) -> session.Data {

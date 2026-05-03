@@ -1,18 +1,20 @@
 import envoy
-import gleam/dynamic/decode
+import gleam/dynamic/decode.{type Decoder}
 import gleam/erlang/process
 import gleam/function
 import gleam/json
-import gleam/option.{type Option}
+import gleam/option
 import gleam/otp/static_supervisor as supervisor
-import gleam/otp/supervision
 import gleam/string
 import logging
 import pog
 import vvv/session
 
 const create_table = "
-  create table if not exists sessions ( id text primary key, data jsonb not null );
+  create table if not exists sessions (
+    id text primary key,
+    data jsonb not null
+  );
 "
 
 const load_session = "
@@ -20,43 +22,32 @@ const load_session = "
 "
 
 const save_session = "
-  insert into sessions ( id, data ) values ( $1, $2 ) on conflict ( id ) do update set data = $2;
+  insert into sessions ( id, data ) values ( $1, $2 )
+  on conflict ( id ) do update set data = $2;
 "
 
-pub fn configure(
+pub fn new(
   supervisor: supervisor.Builder,
 ) -> #(session.Store, supervisor.Builder, fn() -> Result(Nil, String)) {
-  // TODO
-  let assert Ok(database) = envoy.get("DB_DATABASE") as "DB_DATABASE"
-  let assert Ok(host) = envoy.get("DB_HOST") as "DB_HOST"
-  let assert Ok(user) = envoy.get("DB_USER") as "DB_USER"
-  let password = option.from_result(envoy.get("DB_PASSWORD"))
+  let assert Ok(db_name) = envoy.get("SESSION_DB_NAME") as "SESSION_DB_NAME"
+  let assert Ok(db_host) = envoy.get("SESSION_DB_HOST") as "SESSION_DB_HOST"
+  let assert Ok(db_user) = envoy.get("SESSION_DB_USER") as "SESSION_DB_USER"
+  let db_password = option.from_result(envoy.get("SESSION_DB_PASSWORD"))
 
-  let naem = process.new_name("store")
-  let spec = supervised(naem, database:, host:, user:, password:)
-  let connection = pog.named_connection(naem)
-  let store = new(connection)
+  let name = process.new_name("store")
+
+  let spec =
+    pog.default_config(name)
+    |> pog.host(db_host)
+    |> pog.database(db_name)
+    |> pog.user(db_user)
+    |> pog.password(db_password)
+    |> pog.supervised
+
+  let connection = pog.named_connection(name)
+  let store = session.store(load: load(connection), save: save(connection))
   let supervisor = supervisor.add(supervisor, spec)
   #(store, supervisor, fn() { setup(connection) })
-}
-
-fn supervised(
-  name: process.Name(pog.Message),
-  database database: String,
-  host host: String,
-  user user: String,
-  password password: Option(String),
-) -> supervision.ChildSpecification(pog.Connection) {
-  pog.default_config(name)
-  |> pog.host(host)
-  |> pog.database(database)
-  |> pog.user(user)
-  |> pog.password(password)
-  |> pog.supervised
-}
-
-fn new(connection: pog.Connection) -> session.Store {
-  session.store(load: load(connection), save: save(connection))
 }
 
 fn setup(connection: pog.Connection) -> Result(Nil, String) {
@@ -96,7 +87,7 @@ fn load(connection: pog.Connection) -> fn(String) -> session.Data {
   }
 }
 
-fn session_decoder() {
+fn session_decoder() -> Decoder(session.Data) {
   use data <- decode.then(decode.at([0], decode.string))
 
   case parse_value(data) {
@@ -114,7 +105,7 @@ fn parse_value(value: String) -> Result(session.Data, json.DecodeError) {
 }
 
 fn save(connection: pog.Connection) -> fn(String, session.Data) -> String {
-  use id: String, data: session.Data <- function.identity
+  use id, data <- function.identity
 
   let result =
     pog.query(save_session)
@@ -123,11 +114,8 @@ fn save(connection: pog.Connection) -> fn(String, session.Data) -> String {
     |> pog.execute(connection)
 
   case result {
+    Ok(pog.Returned(..)) -> Nil
     Error(error) -> logging.log(logging.Error, string.inspect(error))
-    Ok(pog.Returned(count: 1, rows: [])) -> Nil
-
-    Ok(pog.Returned(..) as unexpected) ->
-      logging.log(logging.Error, string.inspect(unexpected))
   }
 
   id
