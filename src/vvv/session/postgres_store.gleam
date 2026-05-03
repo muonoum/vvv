@@ -78,8 +78,7 @@ fn setup(connection: pog.Connection) -> Result(Nil, String) {
   let queries = [create_table, create_update_function, create_update_trigger]
   use Nil, query <- list.try_fold(queries, Nil)
 
-  pog.query(query)
-  |> pog.execute(connection)
+  pog.execute(pog.query(query), connection)
   |> result.replace(Nil)
 }
 
