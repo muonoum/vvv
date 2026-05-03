@@ -3,6 +3,7 @@ import gleam/dynamic/decode.{type Decoder}
 import gleam/erlang/process
 import gleam/function
 import gleam/json
+import gleam/list
 import gleam/option
 import gleam/otp/static_supervisor as supervisor
 import gleam/result
@@ -73,23 +74,12 @@ pub fn new(
 fn setup(connection: pog.Connection) -> Result(Nil, String) {
   let result = {
     use connection <- pog.transaction(connection)
+    let queries = [create_table, create_update_function, create_update_trigger]
+    use Nil, query <- list.try_fold(queries, Nil)
 
-    use _ <- result.try(
-      pog.query(create_table)
-      |> pog.execute(connection),
-    )
-
-    use _ <- result.try(
-      pog.query(create_update_function)
-      |> pog.execute(connection),
-    )
-
-    use _ <- result.try(
-      pog.query(create_update_trigger)
-      |> pog.execute(connection),
-    )
-
-    Ok(Nil)
+    pog.query(query)
+    |> pog.execute(connection)
+    |> result.replace(Nil)
   }
 
   case result {
