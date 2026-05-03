@@ -35,14 +35,14 @@ pub fn run(
     Error(Nil) ->
       Context(
         value: extra.random_string(32),
-        user_data: dict.new(),
+        data: dict.new(),
         flash: dict.new(),
         next_flash: dict.new(),
       )
 
     Ok(value) -> {
-      let Data(user:, flash:) = store.load(value)
-      Context(value:, user_data: user, flash:, next_flash: dict.new())
+      let Session(data:, flash:) = store.load(value)
+      Context(value:, data:, flash:, next_flash: dict.new())
     }
   }
 
@@ -50,7 +50,7 @@ pub fn run(
   use <- bool.guard(!changed(context1, context2), response)
 
   let value =
-    Data(user: context2.user_data, flash: context2.next_flash)
+    Session(data: context2.data, flash: context2.next_flash)
     |> store.save(context2.value, _)
 
   response.set_cookie(
@@ -64,44 +64,29 @@ pub fn run(
 // STORE
 
 pub opaque type Store {
-  Store(load: fn(String) -> Data, save: fn(String, Data) -> String)
+  Store(load: fn(String) -> Session, save: fn(String, Session) -> String)
 }
 
-pub opaque type Data {
-  Data(user: Dict(String, String), flash: Dict(String, String))
+pub opaque type Session {
+  Session(data: Dict(String, String), flash: Dict(String, String))
 }
 
 pub fn store(
-  load load: fn(String) -> Data,
-  save save: fn(String, Data) -> String,
+  load load: fn(String) -> Session,
+  save save: fn(String, Session) -> String,
 ) -> Store {
   Store(load:, save:)
 }
 
-pub fn empty_data() -> Data {
-  Data(user: dict.new(), flash: dict.new())
+pub fn empty_session() -> Session {
+  Session(data: dict.new(), flash: dict.new())
 }
 
-pub fn data(
-  user user: Dict(String, String),
-  flash flash: Dict(String, String),
-) -> Data {
-  Data(user:, flash:)
-}
-
-pub fn user_data(data: Data) -> Dict(String, String) {
-  data.user
-}
-
-pub fn flash_data(data: Data) -> Dict(String, String) {
-  data.flash
-}
-
-pub fn json_data(data: Data) -> String {
+pub fn to_json(session: Session) -> String {
   json.to_string(
     json.object([
-      #("user", encode_dict(user_data(data))),
-      #("flash", encode_dict(flash_data(data))),
+      #("data", encode_dict(session.data)),
+      #("flash", encode_dict(session.flash)),
     ]),
   )
 }
@@ -110,10 +95,10 @@ fn encode_dict(dict: Dict(String, String)) -> Json {
   json.dict(dict, function.identity, json.string)
 }
 
-pub fn data_decoder() -> Decoder(Data) {
-  use user <- decode.field("user", dict_decoder())
+pub fn session_decoder() -> Decoder(Session) {
+  use data <- decode.field("data", dict_decoder())
   use flash <- decode.field("flash", dict_decoder())
-  decode.success(Data(user:, flash:))
+  decode.success(Session(data:, flash:))
 }
 
 fn dict_decoder() -> Decoder(Dict(String, String)) {
@@ -125,14 +110,14 @@ fn dict_decoder() -> Decoder(Dict(String, String)) {
 pub opaque type Context {
   Context(
     value: String,
-    user_data: Dict(String, String),
+    data: Dict(String, String),
     flash: Dict(String, String),
     next_flash: Dict(String, String),
   )
 }
 
 fn changed(a: Context, b: Context) -> Bool {
-  a.user_data != b.user_data || a.flash != b.next_flash
+  a.data != b.data || a.flash != b.next_flash
 }
 
 // STATE
@@ -141,18 +126,18 @@ pub type State(v) =
   state.State(v, Context)
 
 pub fn get(key: String) -> State(Result(String, Nil)) {
-  use Context(user_data:, ..) <- state.bind(state.get())
-  state.return(dict.get(user_data, key))
+  use Context(data:, ..) <- state.bind(state.get())
+  state.return(dict.get(data, key))
 }
 
 pub fn delete(key: String) -> State(Nil) {
-  use Context(user_data:, ..) as ctx <- state.update
-  Context(..ctx, user_data: dict.delete(user_data, key))
+  use Context(data:, ..) as ctx <- state.update
+  Context(..ctx, data: dict.delete(data, key))
 }
 
 pub fn put(key: String, value: String) -> State(Nil) {
-  use Context(user_data:, ..) as ctx <- state.update()
-  Context(..ctx, user_data: dict.insert(user_data, key, value))
+  use Context(data:, ..) as ctx <- state.update()
+  Context(..ctx, data: dict.insert(data, key, value))
 }
 
 pub fn get_flash(key: String) -> State(Result(String, Nil)) {

@@ -2,7 +2,7 @@ import gleam/erlang/process
 import gleam/function
 import gleam/otp/static_supervisor as supervisor
 import gleam/result
-import vvv/session
+import vvv/session.{type Session}
 import vvv/store.{type Store}
 
 pub fn new(
@@ -15,13 +15,13 @@ pub fn new(
   #(store, supervisor, fn() { Ok(Nil) })
 }
 
-fn load(store: Store(session.Data)) -> fn(String) -> session.Data {
+fn load(store: Store(Session)) -> fn(String) -> Session {
   use id: String <- function.identity
-  result.lazy_unwrap(store.load(store, id), session.empty_data)
+  result.lazy_unwrap(store.load(store, id), session.empty_session)
 }
 
-fn save(store: Store(session.Data)) -> fn(String, session.Data) -> String {
-  use id: String, data: session.Data <- function.identity
+fn save(store: Store(Session)) -> fn(String, Session) -> String {
+  use id, data <- function.identity
   store.save(store, id, data)
   id
 }

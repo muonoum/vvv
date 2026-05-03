@@ -11,7 +11,7 @@ import gleam/string
 import logging
 import pog
 import vvv/extra
-import vvv/session
+import vvv/session.{type Session}
 
 const create_table = "
   create table if not exists sessions (
@@ -82,7 +82,7 @@ fn setup(connection: pog.Connection) -> Result(Nil, String) {
   |> result.replace(Nil)
 }
 
-fn load(connection: pog.Connection) -> fn(String) -> session.Data {
+fn load(connection: pog.Connection) -> fn(String) -> Session {
   use id: String <- function.identity
 
   let result =
@@ -93,21 +93,21 @@ fn load(connection: pog.Connection) -> fn(String) -> session.Data {
 
   case result {
     Ok(pog.Returned(rows: [data], ..)) -> data
-    Ok(pog.Returned(rows: [], ..)) -> session.empty_data()
+    Ok(pog.Returned(rows: [], ..)) -> session.empty_session()
 
     Ok(pog.Returned(..) as unexpected) -> {
       logging.log(logging.Warning, string.inspect(unexpected))
-      session.empty_data()
+      session.empty_session()
     }
 
     Error(error) -> {
       logging.log(logging.Warning, string.inspect(error))
-      session.empty_data()
+      session.empty_session()
     }
   }
 }
 
-fn session_decoder() -> Decoder(session.Data) {
+fn session_decoder() -> Decoder(Session) {
   use data <- decode.then(decode.at([0], decode.string))
 
   case parse_value(data) {
@@ -115,22 +115,22 @@ fn session_decoder() -> Decoder(session.Data) {
 
     Error(error) -> {
       logging.log(logging.Warning, string.inspect(error))
-      decode.success(session.empty_data())
+      decode.success(session.empty_session())
     }
   }
 }
 
-fn parse_value(value: String) -> Result(session.Data, json.DecodeError) {
-  json.parse(value, session.data_decoder())
+fn parse_value(value: String) -> Result(Session, json.DecodeError) {
+  json.parse(value, session.session_decoder())
 }
 
-fn save(connection: pog.Connection) -> fn(String, session.Data) -> String {
+fn save(connection: pog.Connection) -> fn(String, Session) -> String {
   use id, data <- function.identity
 
   let result =
     pog.query(save_session)
     |> pog.parameter(pog.text(id))
-    |> pog.parameter(pog.text(session.json_data(data)))
+    |> pog.parameter(pog.text(session.to_json(data)))
     |> pog.execute(connection)
 
   case result {
