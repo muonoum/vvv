@@ -14,9 +14,9 @@ import vvv/app
 import vvv/auth
 import vvv/component
 import vvv/extra
+import vvv/extra/state
 import vvv/page
 import vvv/session
-import vvv/state
 import vvv/web
 
 pub fn service(

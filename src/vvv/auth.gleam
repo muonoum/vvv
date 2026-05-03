@@ -15,10 +15,10 @@ import gleam/uri.{type Uri, Uri}
 import logging
 import vvv/entra
 import vvv/extra
-import vvv/httpc
-import vvv/report.{type Report}
+import vvv/extra/httpc
+import vvv/extra/report.{type Report}
+import vvv/extra/state
 import vvv/session
-import vvv/state
 import vvv/web
 import ywt
 import ywt/claim
