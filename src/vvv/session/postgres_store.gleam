@@ -10,6 +10,7 @@ import gleam/result
 import gleam/string
 import logging
 import pog
+import vvv/extra
 import vvv/session
 
 const create_table = "
@@ -72,20 +73,14 @@ pub fn new(
 }
 
 fn setup(connection: pog.Connection) -> Result(Nil, String) {
-  let result = {
-    use connection <- pog.transaction(connection)
-    let queries = [create_table, create_update_function, create_update_trigger]
-    use Nil, query <- list.try_fold(queries, Nil)
+  use <- extra.return(result.map_error(_, string.inspect))
+  use connection <- pog.transaction(connection)
+  let queries = [create_table, create_update_function, create_update_trigger]
+  use Nil, query <- list.try_fold(queries, Nil)
 
-    pog.query(query)
-    |> pog.execute(connection)
-    |> result.replace(Nil)
-  }
-
-  case result {
-    Error(error) -> Error(string.inspect(error))
-    Ok(Nil) -> Ok(Nil)
-  }
+  pog.query(query)
+  |> pog.execute(connection)
+  |> result.replace(Nil)
 }
 
 fn load(connection: pog.Connection) -> fn(String) -> session.Data {
