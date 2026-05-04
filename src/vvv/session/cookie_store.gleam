@@ -11,7 +11,8 @@ pub fn new(
 }
 
 fn load(value: String) -> Session {
-  result.lazy_unwrap(parse_value(value), session.empty_session)
+  use <- result.lazy_unwrap(parse_value(value))
+  session.empty_session()
 }
 
 fn parse_value(value: String) -> Result(Session, Nil) {

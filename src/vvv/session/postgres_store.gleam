@@ -96,7 +96,7 @@ fn load(connection: pog.Connection) -> fn(String) -> Session {
     Ok(pog.Returned(rows: [], ..)) -> session.empty_session()
 
     Ok(pog.Returned(..) as unexpected) -> {
-      log.warning("Load session", [log.inspect("value", unexpected)])
+      log.warning("Load session", [log.inspect("unexpected", unexpected)])
       session.empty_session()
     }
 
