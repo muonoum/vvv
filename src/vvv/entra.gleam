@@ -3,19 +3,14 @@ import gleam/dynamic/decode
 import gleam/json
 import gleam/option
 import gleam/result
-import gleam/string
-import logging
+import vvv/extra/log
 
 // HACK: `ywt/verify_key.set_decoder` krever 'alg', men Entra setter ikke dette
 // feltet på nøklene sine
 pub fn set_missing_key_algorithm(data: BitArray) -> BitArray {
   try_update(data)
   |> result.try_recover(fn(error) {
-    logging.log(
-      logging.Warning,
-      "Could not update key algorithm: " <> string.inspect(error),
-    )
-
+    log.warning("Could not update key algorithm", [log.inspect("error", error)])
     Ok(data)
   })
   |> result.unwrap(data)
@@ -58,10 +53,9 @@ fn update_rsa_key(
   let algorithm = {
     use <- option.lazy_unwrap(algorithm)
 
-    logging.log(
-      logging.Warning,
-      "Setting missing 'alg' field to 'RS256' for '" <> key_id <> "'",
-    )
+    log.warning("Setting missing 'alg' field to 'RS256'", [
+      log.string("key-id", key_id),
+    ])
 
     "RS256"
   }

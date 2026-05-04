@@ -4,10 +4,9 @@ import gleam/http/response
 import gleam/json
 import gleam/otp/actor
 import gleam/otp/factory_supervisor as factory
-import gleam/string
-import logging
 import lustre
 import lustre/server_component as server
+import vvv/extra/log
 import vvv/web
 
 pub type Name(argument, message) =
@@ -26,8 +25,10 @@ pub fn start(
     Ok(actor.Started(pid: _, data: component)) -> service(request, component)
 
     Error(error) -> {
-      let message = ["Server component", request.path, string.inspect(error)]
-      logging.log(logging.Error, string.join(message, ": "))
+      log.error("Server component", [
+        log.string("path", request.path),
+        log.inspect("error", error),
+      ])
 
       response.new(500)
       |> web.text_body("Internal Server Error")
@@ -60,8 +61,7 @@ fn on_init(
   request: web.Request,
   component: process.Subject(lustre.RuntimeMessage(message)),
 ) -> #(State(message), process.Selector(server.ClientMessage(message))) {
-  logging.log(logging.Info, "Join " <> request.path)
-
+  log.info("Join component", [log.string("path", request.path)])
   let subject = process.new_subject()
   let selector = process.select(selector, subject)
   process.send(component, server.register_subject(subject))
@@ -72,7 +72,7 @@ fn on_close(
   _connection: ewe.WebsocketConnection,
   state: State(message),
 ) -> Nil {
-  logging.log(logging.Info, "Leave " <> state.request.path)
+  log.info("Leave component", [log.string("path", state.request.path)])
   process.send(state.component, lustre.shutdown())
 }
 
@@ -96,10 +96,9 @@ fn runtime_message(
     Ok(message) -> process.send(state.component, message)
 
     Error(error) ->
-      log_error([
-        "Parse runtime message",
-        state.request.path,
-        string.inspect(error),
+      log.error("Parse runtime message", [
+        log.string("path", state.request.path),
+        log.inspect("error", error),
       ])
   }
 
@@ -113,16 +112,11 @@ fn client_message(connection, message, state: State(message)) {
     Ok(Nil) -> Nil
 
     Error(error) ->
-      log_error([
-        "Send client message",
-        state.request.path,
-        string.inspect(error),
+      log.error("Send client message", [
+        log.string("path", state.request.path),
+        log.inspect("error", error),
       ])
   }
 
   ewe.websocket_continue(state)
-}
-
-fn log_error(parts: List(String)) -> Nil {
-  logging.log(logging.Error, string.join(parts, ": "))
 }

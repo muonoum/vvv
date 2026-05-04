@@ -1,8 +1,7 @@
 import gleam/json
 import gleam/otp/static_supervisor as supervisor
 import gleam/result
-import gleam/string
-import logging
+import vvv/extra/log
 import vvv/session.{type Session}
 
 pub fn new(
@@ -17,7 +16,7 @@ fn load(value: String) -> Session {
 
 fn parse_value(value: String) -> Result(Session, Nil) {
   use error <- result.try_recover(json.parse(value, session.session_decoder()))
-  logging.log(logging.Warning, string.inspect(error))
+  log.warning("Parse session", [log.inspect("error", error)])
   Error(Nil)
 }
 

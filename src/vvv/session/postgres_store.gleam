@@ -8,9 +8,9 @@ import gleam/option
 import gleam/otp/static_supervisor as supervisor
 import gleam/result
 import gleam/string
-import logging
 import pog
 import vvv/extra
+import vvv/extra/log
 import vvv/session.{type Session}
 
 const create_table = "
@@ -96,12 +96,12 @@ fn load(connection: pog.Connection) -> fn(String) -> Session {
     Ok(pog.Returned(rows: [], ..)) -> session.empty_session()
 
     Ok(pog.Returned(..) as unexpected) -> {
-      logging.log(logging.Warning, string.inspect(unexpected))
+      log.warning("Load session", [log.inspect("value", unexpected)])
       session.empty_session()
     }
 
     Error(error) -> {
-      logging.log(logging.Warning, string.inspect(error))
+      log.warning("Load session", [log.inspect("error", error)])
       session.empty_session()
     }
   }
@@ -114,7 +114,7 @@ fn session_decoder() -> Decoder(Session) {
     Ok(data) -> decode.success(data)
 
     Error(error) -> {
-      logging.log(logging.Warning, string.inspect(error))
+      log.warning("Decode session", [log.inspect("error", error)])
       decode.success(session.empty_session())
     }
   }
@@ -134,8 +134,8 @@ fn save(connection: pog.Connection) -> fn(String, Session) -> String {
     |> pog.execute(connection)
 
   case result {
-    Ok(pog.Returned(..)) -> Nil
-    Error(error) -> logging.log(logging.Error, string.inspect(error))
+    Error(error) -> log.error("Save session", [log.inspect("error", error)])
+    Ok(pog.Returned(count: _, rows: _)) -> Nil
   }
 
   id

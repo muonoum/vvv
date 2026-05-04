@@ -11,12 +11,11 @@ import gleam/http/response
 import gleam/int
 import gleam/list
 import gleam/result
-import gleam/string
 import gleam/uri
-import logging
 import marceau
 import simplifile
 import vvv/extra
+import vvv/extra/log
 
 pub type Request =
   request.Request(ewe.Connection)
@@ -33,27 +32,19 @@ pub type Asset {
   )
 }
 
-@external(erlang, "timer", "tc")
-fn time(fun: fn() -> a) -> #(Int, a)
-
 pub fn log(request: Request, handler: fn() -> Response) -> Response {
-  let #(elapsed, response) = time(handler)
+  let #(duration, response) = extra.time(handler)
 
-  let elapsed = case elapsed {
-    n if n >= 1000 -> int.to_string(elapsed / 1000) <> "ms"
-    _else -> int.to_string(elapsed) <> "µs"
+  let duration = case duration {
+    n if n >= 1000 -> int.to_string(duration / 1000) <> "ms"
+    _else -> int.to_string(duration) <> "µs"
   }
 
-  logging.log(
-    logging.Info,
-    elapsed
-      <> " "
-      <> int.to_string(response.status)
-      <> " "
-      <> http.method_to_string(request.method)
-      <> " "
-      <> request.path,
-  )
+  log.info(http.method_to_string(request.method), [
+    log.string("duration", duration),
+    log.int("status", response.status),
+    log.string("path", request.path),
+  ])
 
   response
 }
@@ -63,7 +54,7 @@ pub fn rescue(handler: fn() -> Response) -> Response {
     Ok(response) -> response
 
     Error(error) -> {
-      logging.log(logging.Error, string.inspect(error))
+      log.error("", [log.inspect("error", error)])
 
       response.new(500)
       |> response.set_body(ewe.TextData("Internal Server Error"))
@@ -133,17 +124,17 @@ pub fn load_assets(base: String) -> Dict(List(String), Asset) {
     use relative_path <- list.filter_map(extra.wildcard(base, "**"))
     let full_path = filepath.join(base, relative_path)
     use <- bool.guard(extra.is_directory(full_path), Error(Nil))
-    use #(content_type, hash) <- result.try(read_path(full_path))
+    use #(content_type, hash) <- result.try(read_asset(full_path))
     let asset = Asset(relative_path:, full_path:, content_type:, hash:)
     Ok(#(uri.path_segments(relative_path), asset))
   })
 }
 
-fn read_path(path: String) -> Result(#(String, String), Nil) {
+fn read_asset(path: String) -> Result(#(String, String), Nil) {
   use bits <- result.try(
     simplifile.read_bits(path)
     |> result.try_recover(fn(error) {
-      logging.log(logging.Warning, string.inspect(error))
+      log.warning("Read asset", [log.inspect("error", error)])
       Error(Nil)
     }),
   )
@@ -178,9 +169,12 @@ pub fn serve_assets(
 
         Ok(_header) | Error(Nil) -> {
           case simplifile.read_bits(asset.full_path) {
-            Error(_error) ->
+            Error(error) -> {
+              log.error("", [log.inspect("error", error)])
+
               response.new(500)
               |> response.set_body(ewe.TextData("Internal Server Error"))
+            }
 
             Ok(bits) ->
               response.new(200)

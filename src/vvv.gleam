@@ -15,6 +15,7 @@ import lustre
 import vvv/app
 import vvv/auth
 import vvv/extra
+import vvv/extra/log
 import vvv/router
 import vvv/session/actor_store
 import vvv/session/cookie_store
@@ -22,8 +23,7 @@ import vvv/session/postgres_store
 import vvv/web
 
 pub fn main() -> Nil {
-  logging.configure()
-  logging.set_level(logging.Debug)
+  log.configure(logging.Debug)
 
   let http_address =
     envoy.get("HTTP_ADDRESS")

@@ -10,12 +10,11 @@ import gleam/json.{type Json}
 import gleam/list
 import gleam/option
 import gleam/result
-import gleam/string
 import gleam/uri.{type Uri, Uri}
-import logging
 import vvv/entra
 import vvv/extra
 import vvv/extra/httpc
+import vvv/extra/log
 import vvv/extra/report.{type Report}
 import vvv/extra/state
 import vvv/session
@@ -45,6 +44,7 @@ pub type Login {
   )
 }
 
+// TODO: Token refresh 
 pub type Session {
   Session(
     user: User,
@@ -113,11 +113,11 @@ pub fn login_handler(
       #("redirect_uri", uri.to_string(config.redirect_uri)),
       #("response_mode", "form_post"),
       #("response_type", "code id_token"),
-      #("scope", config.scope),
       #("code_challenge_method", "S256"),
       #("code_challenge", code_challenge),
-      #("state", state),
+      #("scope", config.scope),
       #("nonce", id_nonce),
+      #("state", state),
     ])
 
   let return_path =
@@ -188,7 +188,7 @@ pub fn finalize_handler(
 
   case session {
     Error(Nil) -> {
-      logging.log(logging.Error, "login session not found")
+      log.error("Login session not found", [])
 
       response.new(400)
       |> web.text_body("Bad Request")
@@ -213,7 +213,7 @@ pub fn finalize_handler(
 
         // TODO
         Error(report) -> {
-          logging.log(logging.Error, string.inspect(report))
+          log.error("Finalize auth", [log.inspect("report", report)])
 
           response.new(400)
           |> web.text_body("Bad Request")

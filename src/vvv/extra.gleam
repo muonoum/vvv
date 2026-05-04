@@ -3,6 +3,9 @@ import gleam/crypto
 import gleam/erlang/charlist.{type Charlist}
 import gleam/list
 
+@external(erlang, "timer", "tc")
+pub fn time(fun: fn() -> a) -> #(Int, a)
+
 pub fn return(wrap: fn(a) -> b, body: fn() -> a) -> b {
   wrap(body())
 }
