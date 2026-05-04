@@ -57,7 +57,7 @@ type State(message) {
 
 fn on_init(
   _connection: ewe.WebsocketConnection,
-  selector,
+  selector: process.Selector(server.ClientMessage(message)),
   request: web.Request,
   component: process.Subject(lustre.RuntimeMessage(message)),
 ) -> #(State(message), process.Selector(server.ClientMessage(message))) {
