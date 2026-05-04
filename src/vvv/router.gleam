@@ -12,7 +12,6 @@ import lustre/element/html
 import lustre/server_component
 import vvv/app
 import vvv/auth
-import vvv/component
 import vvv/extra
 import vvv/extra/state
 import vvv/page
@@ -59,8 +58,10 @@ pub fn service(
 
     http.Get, ["components", "app"] -> {
       use <- session
-      use #(user, _status) <- state.bind(get_login())
-      state.return(component.start(request, app, user))
+      use #(user, status) <- state.bind(get_login())
+      // TODO: flash/status blir fjernet etter lasting av page_handler
+      // og er ikke lenger tilgjengelig her.
+      state.return(app.start(request, app, user:, status:))
     }
 
     _method, _segments ->
