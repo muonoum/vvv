@@ -30,13 +30,13 @@ pub fn handler(
 pub fn run(
   request: web.Request,
   store store: Store,
-  cookie cookie_name: String,
+  cookie cookie: String,
   signing_key signing_key: String,
   handler handler: fn() -> State(web.Response),
 ) -> web.Response {
   let value =
     request.get_cookies(request)
-    |> list.key_find(cookie_name)
+    |> list.key_find(cookie)
     |> result.try(crypto.verify_signed_message(_, <<signing_key:utf8>>))
     |> result.try(bit_array.to_string)
 
@@ -64,7 +64,7 @@ pub fn run(
 
   response.set_cookie(
     response,
-    cookie_name,
+    cookie,
     crypto.sign_message(<<value:utf8>>, <<signing_key:utf8>>, crypto.Sha512),
     cookie.Attributes(..cookie.defaults(http.Https), max_age: option.None),
   )
