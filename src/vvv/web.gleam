@@ -54,7 +54,7 @@ pub fn rescue(handler: fn() -> Response) -> Response {
     Ok(response) -> response
 
     Error(error) -> {
-      log.error("", [log.inspect("error", error)])
+      log.error("Rescued", [log.inspect("error", error)])
 
       response.new(500)
       |> response.set_body(ewe.TextData("Internal Server Error"))

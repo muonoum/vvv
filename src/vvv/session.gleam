@@ -18,6 +18,15 @@ import vvv/web
 
 // TODO: Regenerate id
 
+pub fn handler(
+  request: web.Request,
+  store store: Store,
+  cookie cookie: String,
+  signing_key signing_key: String,
+) -> fn(fn() -> State(web.Response)) -> web.Response {
+  run(request, store:, cookie:, signing_key:, handler: _)
+}
+
 pub fn run(
   request: web.Request,
   store store: Store,
