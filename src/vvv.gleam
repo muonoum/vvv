@@ -43,9 +43,9 @@ pub fn main() -> Nil {
 
   let #(session_store, supervisor, initialise_session_store) = {
     case envoy.get("SESSION_STORE") {
-      Ok("cookie") -> cookie_store.new(supervisor)
-      Ok("postgres") -> postgres_store.new(supervisor)
       Ok("actor") -> actor_store.new(supervisor)
+      Ok("postgres") -> postgres_store.new(supervisor)
+      Ok("cookie") -> cookie_store.new(supervisor)
       Ok(..) | Error(Nil) -> panic as "SESSION_STORE"
     }
   }
