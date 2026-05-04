@@ -1,38 +1,38 @@
 import gleam/option.{type Option}
 import lustre
+import lustre/component
 import lustre/effect.{type Effect}
 import lustre/element.{type Element}
-import vvv/auth
-import vvv/component
 import vvv/page
 
-type Argument =
-  Result(Option(auth.User), String)
-
-pub type Component =
-  component.Name(Argument, Message)
-
 pub type App =
-  lustre.App(Result(Option(auth.User), String), Model, Message)
+  lustre.App(page.User, Model, Message)
 
 pub opaque type Model {
-  Model(user: Result(Option(auth.User), String))
+  Model(user: page.User, status: Option(String))
 }
 
-pub type Message
+pub opaque type Message {
+  StatusReceived(String)
+}
 
 pub fn component() -> App {
-  lustre.component(init, update, view, options: [])
+  lustre.component(init, update, view, options: [
+    component.on_attribute_change("status", fn(status) {
+      Ok(StatusReceived(status))
+    }),
+  ])
 }
 
-fn init(user: Result(Option(auth.User), String)) -> #(Model, Effect(Message)) {
-  #(Model(user:), effect.none())
+fn init(user: page.User) -> #(Model, Effect(Message)) {
+  #(Model(user: user, status: option.None), effect.none())
 }
 
-fn update(model: Model, _message: Message) -> #(Model, Effect(Message)) {
-  #(model, effect.none())
+fn update(model: Model, message: Message) -> #(Model, Effect(Message)) {
+  let StatusReceived(status) = message
+  #(Model(..model, status: option.Some(status)), effect.none())
 }
 
 fn view(model: Model) -> Element(Message) {
-  page.view(model.user, Error(Nil))
+  page.view(model.user, model.status)
 }

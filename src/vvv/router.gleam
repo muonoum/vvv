@@ -6,12 +6,13 @@ import gleam/http/response
 import gleam/json
 import gleam/option
 import gleam/string
-import lustre/attribute
+import lustre/attribute.{attribute}
 import lustre/element.{type Element}
 import lustre/element/html
 import lustre/server_component
 import vvv/app
 import vvv/auth
+import vvv/component
 import vvv/extra
 import vvv/extra/state
 import vvv/page
@@ -19,7 +20,7 @@ import vvv/session
 import vvv/web
 
 pub fn service(
-  app app: app.Component,
+  app app: component.Name(page.User, app.Message),
   auth_config auth_config: auth.Config,
   session_store store: session.Store,
   static_handler static: fn(web.Request, fn() -> web.Response) -> web.Response,
@@ -58,10 +59,8 @@ pub fn service(
 
     http.Get, ["components", "app"] -> {
       use <- session
-      use #(user, status) <- state.bind(get_login())
-      // TODO: flash/status blir fjernet etter lasting av page_handler
-      // og er ikke lenger tilgjengelig her.
-      state.return(app.start(request, app, user:, status:))
+      use user <- state.bind(get_user())
+      state.return(component.start(request, app, user))
     }
 
     _method, _segments ->
@@ -70,11 +69,11 @@ pub fn service(
   }
 }
 
-fn get_login() -> session.State(#(page.User, page.Status)) {
+fn get_user() -> session.State(page.User) {
   use login <- state.bind(session.get("login"))
-  use status <- state.bind(session.get_flash("status"))
+  use <- extra.return(state.return)
 
-  let user = case login {
+  case login {
     Error(Nil) -> Ok(option.None)
 
     Ok(auth) ->
@@ -83,8 +82,11 @@ fn get_login() -> session.State(#(page.User, page.Status)) {
         Ok(auth.Session(user:, ..)) -> Ok(option.Some(user))
       }
   }
+}
 
-  state.return(#(user, status))
+fn get_login_status() -> session.State(page.Status) {
+  session.get_flash("status")
+  |> state.map(option.from_result)
 }
 
 fn page_handler(
@@ -108,7 +110,8 @@ fn document(
   csrf_token csrf_token: String,
   csp_nonce csp_nonce: String,
 ) -> session.State(Element(message)) {
-  use #(user, status) <- state.bind(get_login())
+  use user <- state.bind(get_user())
+  use status <- state.bind(get_login_status())
   use <- extra.return(state.return)
 
   html.html([], [
@@ -131,7 +134,14 @@ fn document(
       ),
     ]),
     html.body([], [
-      server_component.element([server_component.route("/components/app")], []),
+      server_component.element(
+        [
+          server_component.route("/components/app"),
+          option.map(status, attribute("status", _))
+            |> option.lazy_unwrap(attribute.none),
+        ],
+        [],
+      ),
       page.view(user, status),
     ]),
   ])

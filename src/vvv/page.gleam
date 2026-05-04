@@ -8,7 +8,7 @@ pub type User =
   Result(Option(auth.User), String)
 
 pub type Status =
-  Result(String, Nil)
+  Option(String)
 
 pub fn view(user: User, status: Status) -> Element(message) {
   html.div([attribute.class("flex gap-2 p-4")], case user {
@@ -42,11 +42,11 @@ fn logout() -> Element(message) {
 
 fn login_status(status: Status) -> Element(message) {
   case status {
-    Error(Nil) -> element.none()
+    option.None -> element.none()
 
-    Ok(message) ->
+    option.Some(status) ->
       html.div([attribute.class("font-bold text-green-700")], [
-        element.text(message),
+        element.text(status),
       ])
   }
 }
