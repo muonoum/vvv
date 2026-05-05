@@ -18,12 +18,15 @@ import vvv/web
 
 // TODO: Regenerate id
 
+pub type Handler =
+  fn(fn() -> State(web.Response)) -> web.Response
+
 pub fn handler(
   request: web.Request,
   store store: Store,
   cookie cookie: String,
   signing_key signing_key: String,
-) -> fn(fn() -> State(web.Response)) -> web.Response {
+) -> Handler {
   run(request, store:, cookie:, signing_key:, handler: _)
 }
 
@@ -134,7 +137,12 @@ fn changed(a: Context, b: Context) -> Bool {
 pub type State(v) =
   state.State(v, Context)
 
-pub fn get(key: String) -> State(Result(String, Nil)) {
+pub fn insert(key: String, value: String) -> State(Nil) {
+  use Context(data:, ..) as ctx <- state.update()
+  Context(..ctx, data: dict.insert(data, key, value))
+}
+
+pub fn read(key: String) -> State(Result(String, Nil)) {
   use Context(data:, ..) <- state.bind(state.get())
   state.return(dict.get(data, key))
 }
@@ -144,12 +152,18 @@ pub fn delete(key: String) -> State(Nil) {
   Context(..ctx, data: dict.delete(data, key))
 }
 
-pub fn put(key: String, value: String) -> State(Nil) {
-  use Context(data:, ..) as ctx <- state.update()
-  Context(..ctx, data: dict.insert(data, key, value))
+pub fn take(key: String) -> State(Result(String, Nil)) {
+  use value <- state.bind(read(key))
+  use <- state.do(delete(key))
+  state.return(value)
 }
 
-pub fn get_flash(key: String) -> State(Result(String, Nil)) {
+pub fn insert_flash(key: String, value: String) -> State(Nil) {
+  use Context(next_flash:, ..) as ctx <- state.update()
+  Context(..ctx, next_flash: dict.insert(next_flash, key, value))
+}
+
+pub fn read_flash(key: String) -> State(Result(String, Nil)) {
   use Context(flash:, ..) <- state.bind(state.get())
   state.return(dict.get(flash, key))
 }
@@ -157,9 +171,4 @@ pub fn get_flash(key: String) -> State(Result(String, Nil)) {
 pub fn delete_flash(key: String) -> State(Nil) {
   use Context(next_flash:, ..) as ctx <- state.update
   Context(..ctx, next_flash: dict.delete(next_flash, key))
-}
-
-pub fn put_flash(key: String, value: String) -> State(Nil) {
-  use Context(next_flash:, ..) as ctx <- state.update()
-  Context(..ctx, next_flash: dict.insert(next_flash, key, value))
 }

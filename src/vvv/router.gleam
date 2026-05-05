@@ -4,8 +4,11 @@ import gleam/http
 import gleam/http/request
 import gleam/http/response
 import gleam/json
+import gleam/list
 import gleam/option
+import gleam/result
 import gleam/string
+import gleam/uri
 import lustre/attribute.{attribute}
 import lustre/element.{type Element}
 import lustre/element/html
@@ -20,7 +23,7 @@ import vvv/session
 import vvv/web
 
 pub fn service(
-  app app: component.Name(page.User, app.Message),
+  app app: component.Name(app.Arguments, app.Message),
   auth_config auth_config: auth.Config,
   session_store store: session.Store,
   static_handler static: fn(web.Request, fn() -> web.Response) -> web.Response,
@@ -34,33 +37,25 @@ pub fn service(
   let session = session.handler(request, store:, cookie: "vvv", signing_key:)
 
   case request.method, request.path_segments(request) {
+    _method, ["auth", ..segments] ->
+      auth.router(request, config: auth_config, session:, segments:)
+
     http.Get, [] -> {
       use csp_nonce <- web.csp_nonce()
       use <- session
       page_handler(title: "vvv", csrf_token: "TODO", csp_nonce:)
     }
 
-    http.Get, ["auth", "login"] -> {
-      use <- session
-      auth.login_handler(request, auth_config)
-    }
-
-    http.Get, ["auth", "logout"] -> {
-      use <- session
-      auth.logout_handler(request)
-    }
-
-    http.Post, ["auth", "callback"] -> auth.callback_handler(request)
-
-    http.Get, ["auth", "finalize"] -> {
-      use <- session
-      auth.finalize_handler(request, auth_config)
-    }
-
     http.Get, ["components", "app"] -> {
       use <- session
       use user <- state.bind(get_user())
-      state.return(component.start(request, app, user))
+
+      let status =
+        request.get_query(request)
+        |> result.try(list.key_find(_, "status"))
+        |> option.from_result
+
+      state.return(component.start(request, app, #(user, status)))
     }
 
     _method, _segments ->
@@ -70,7 +65,7 @@ pub fn service(
 }
 
 fn get_user() -> session.State(page.User) {
-  use login <- state.bind(session.get("login"))
+  use login <- state.bind(session.read("login"))
   use <- extra.return(state.return)
 
   case login {
@@ -82,11 +77,6 @@ fn get_user() -> session.State(page.User) {
         Ok(auth.Session(user:, ..)) -> Ok(option.Some(user))
       }
   }
-}
-
-fn get_login_status() -> session.State(page.Status) {
-  session.get_flash("status")
-  |> state.map(option.from_result)
 }
 
 fn page_handler(
@@ -111,8 +101,19 @@ fn document(
   csp_nonce csp_nonce: String,
 ) -> session.State(Element(message)) {
   use user <- state.bind(get_user())
-  use status <- state.bind(get_login_status())
+
+  use status <- state.bind({
+    session.read_flash("status")
+    |> state.map(option.from_result)
+  })
+
   use <- extra.return(state.return)
+
+  let app_uri =
+    uri.Uri(..uri.empty, path: "/components/app", query: {
+      use status <- option.map(status)
+      uri.query_to_string([#("status", status)])
+    })
 
   html.html([], [
     html.head([], [
@@ -136,7 +137,7 @@ fn document(
     html.body([], [
       server_component.element(
         [
-          server_component.route("/components/app"),
+          server_component.route(uri.to_string(app_uri)),
           option.map(status, attribute("status", _))
             |> option.lazy_unwrap(attribute.none),
         ],

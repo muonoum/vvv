@@ -98,6 +98,36 @@ fn try_key(
   |> result.replace_error(key)
 }
 
+pub fn router(
+  request: web.Request,
+  config config: Config,
+  session session: session.Handler,
+  segments segments: List(String),
+) -> web.Response {
+  case request.method, segments {
+    http.Get, ["login"] -> {
+      use <- session
+      login_handler(request, config)
+    }
+
+    http.Get, ["logout"] -> {
+      use <- session
+      logout_handler(request)
+    }
+
+    http.Post, ["callback"] -> callback_handler(request)
+
+    http.Get, ["finalize"] -> {
+      use <- session
+      finalize_handler(request, config)
+    }
+
+    _method, _segments ->
+      response.new(404)
+      |> web.text_body("Not Found")
+  }
+}
+
 pub fn login_handler(
   request: web.Request,
   config: Config,
@@ -128,7 +158,7 @@ pub fn login_handler(
 
   let authorize_uri = Uri(..config.authorize_uri, query: option.Some(query))
   let login = Login(id_nonce:, state:, code_verifier:, return_path:)
-  use <- state.do(session.put("login", json.to_string(encode_login(login))))
+  use <- state.do(session.insert("login", json.to_string(encode_login(login))))
 
   uri.to_string(authorize_uri)
   |> response.redirect
@@ -184,7 +214,7 @@ pub fn finalize_handler(
   request: web.Request,
   config: Config,
 ) -> session.State(web.Response) {
-  use session <- state.bind(session.get("login"))
+  use session <- state.bind(session.read("login"))
 
   case session {
     Error(Nil) -> {
@@ -201,10 +231,10 @@ pub fn finalize_handler(
           use <- state.do({
             encode_session(session)
             |> json.to_string
-            |> session.put("login", _)
+            |> session.insert("login", _)
           })
 
-          use <- state.do(session.put_flash("status", "login ok"))
+          use <- state.do(session.insert_flash("status", "login ok"))
 
           response.redirect(login.return_path)
           |> web.empty_body

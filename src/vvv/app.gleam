@@ -1,36 +1,32 @@
 import gleam/option.{type Option}
 import lustre
-import lustre/component
 import lustre/effect.{type Effect}
 import lustre/element.{type Element}
 import vvv/page
 
+pub type Arguments =
+  #(page.User, Option(String))
+
 pub type App =
-  lustre.App(page.User, Model, Message)
+  lustre.App(Arguments, Model, Message)
 
 pub opaque type Model {
   Model(user: page.User, status: Option(String))
 }
 
-pub opaque type Message {
-  StatusReceived(String)
-}
+pub type Message
 
 pub fn component() -> App {
-  lustre.component(init, update, view, options: [
-    component.on_attribute_change("status", fn(status) {
-      Ok(StatusReceived(status))
-    }),
-  ])
+  lustre.component(init, update, view, options: [])
 }
 
-fn init(user: page.User) -> #(Model, Effect(Message)) {
-  #(Model(user: user, status: option.None), effect.none())
+fn init(args: Arguments) -> #(Model, Effect(Message)) {
+  let #(user, status) = args
+  #(Model(user: user, status:), effect.none())
 }
 
-fn update(model: Model, message: Message) -> #(Model, Effect(Message)) {
-  let StatusReceived(status) = message
-  #(Model(..model, status: option.Some(status)), effect.none())
+fn update(model: Model, _message: Message) -> #(Model, Effect(Message)) {
+  #(model, effect.none())
 }
 
 fn view(model: Model) -> Element(Message) {
