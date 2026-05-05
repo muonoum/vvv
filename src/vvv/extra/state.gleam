@@ -1,6 +1,3 @@
-import gleam/list
-import vvv/extra
-
 pub type State(v, ctx) {
   State(run: fn(ctx) -> #(v, ctx))
 }
@@ -46,36 +43,13 @@ pub fn put(ctx: ctx) -> State(Nil, ctx) {
   #(Nil, ctx)
 }
 
-pub fn update(mapper: fn(ctx) -> ctx) -> State(Nil, ctx) {
-  use ctx <- bind(get())
-  put(mapper(ctx))
-}
-
-pub fn replace(state: State(a, ctx), v: b) -> State(b, ctx) {
-  use ctx <- State
-  let #(_, ctx) = state.run(ctx)
-  #(v, ctx)
-}
-
 pub fn map(state: State(a, ctx), mapper: fn(a) -> b) -> State(b, ctx) {
   use ctx <- State
   let #(v, ctx) = state.run(ctx)
   #(mapper(v), ctx)
 }
 
-pub fn map2(
-  state1: State(a, ctx),
-  state2: State(b, ctx),
-  mapper: fn(a, b) -> c,
-) -> State(c, ctx) {
-  use ctx <- State
-  let #(a, ctx) = state1.run(ctx)
-  let #(b, ctx) = state2.run(ctx)
-  #(mapper(a, b), ctx)
-}
-
-pub fn sequence(states: List(State(v, ctx))) -> State(List(v), ctx) {
-  use <- extra.return(map(_, list.reverse))
-  use list, state <- list.fold(states, return([]))
-  map2(list, state, list.prepend)
+pub fn update(mapper: fn(ctx) -> ctx) -> State(Nil, ctx) {
+  use ctx <- bind(get())
+  put(mapper(ctx))
 }
