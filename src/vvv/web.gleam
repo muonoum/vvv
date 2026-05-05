@@ -75,7 +75,9 @@ pub fn csp_nonce(handler: fn(String) -> Response) -> Response {
 }
 
 pub fn text_body(response: response.Response(v), text: String) -> Response {
-  response.set_body(response, ewe.TextData(text))
+  response
+  |> response.set_header("content-type", "text/plain")
+  |> response.set_body(ewe.TextData(text))
 }
 
 pub fn empty_body(response: response.Response(v)) -> Response {

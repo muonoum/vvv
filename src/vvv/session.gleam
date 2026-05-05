@@ -23,8 +23,8 @@ pub type Handler =
 
 pub fn handler(
   request: web.Request,
-  store store: Store,
   cookie cookie: String,
+  store store: Store,
   signing_key signing_key: String,
 ) -> Handler {
   run(request, store:, cookie:, signing_key:, handler: _)
