@@ -130,8 +130,8 @@ fn document(
     uri.Uri(..uri.empty, path: "/components/app", query: {
       option.Some(
         uri.query_to_string(case status {
-          option.None -> query
           option.Some(status) -> [#("status", status), ..query]
+          option.None -> query
         }),
       )
     })
