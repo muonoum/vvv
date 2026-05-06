@@ -7,10 +7,7 @@ import vvv/auth
 pub type User =
   Result(Option(auth.User), String)
 
-pub type Status =
-  Option(String)
-
-pub fn view(user: User, status: Status) -> Element(message) {
+pub fn view(user: User, status: Option(String)) -> Element(message) {
   html.div([attribute.class("flex gap-2 p-4")], case user {
     Error(message) -> [
       login(),
@@ -40,7 +37,7 @@ fn logout() -> Element(message) {
   ])
 }
 
-fn login_status(status: Status) -> Element(message) {
+fn login_status(status: Option(String)) -> Element(message) {
   case status {
     option.None -> element.none()
 
