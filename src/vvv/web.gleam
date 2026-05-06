@@ -73,8 +73,13 @@ pub fn verify_origin(
     |> result.lazy_or(fn() { request.get_header(request, "referer") })
     |> result.try(uri.parse)
 
-  use <- bool.lazy_guard(origin == Ok(target_origin), next)
-  text_body(response.new(400), "Bad Request")
+  case origin {
+    Ok(origin)
+      if target_origin.host == origin.host && target_origin.port == origin.port
+    -> next()
+
+    _else -> text_body(response.new(400), "Bad Request")
+  }
 }
 
 pub fn csp_nonce(handler: fn(String) -> Response) -> Response {

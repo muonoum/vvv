@@ -100,17 +100,20 @@ fn try_key(
 
 pub fn router(
   request: web.Request,
+  target_origin target_origin: Uri,
   config config: Config,
   session session: session.Handler,
   segments segments: List(String),
 ) -> web.Response {
   case request.method, segments {
     http.Get, ["login"] -> {
+      use <- web.verify_origin(request, target_origin)
       use <- session
       login_handler(request, config)
     }
 
     http.Get, ["logout"] -> {
+      use <- web.verify_origin(request, target_origin)
       use <- session
       logout_handler(request)
     }

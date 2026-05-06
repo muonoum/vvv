@@ -37,7 +37,13 @@ pub fn service(
 
   case request.method, request.path_segments(request) {
     _method, ["auth", ..segments] ->
-      auth.router(request, config: auth_config, session:, segments:)
+      auth.router(
+        request,
+        target_origin:,
+        config: auth_config,
+        session:,
+        segments:,
+      )
 
     http.Get, [] -> {
       use csp_nonce <- web.csp_nonce()
