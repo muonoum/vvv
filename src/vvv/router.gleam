@@ -50,18 +50,7 @@ pub fn service(
 
     http.Get, ["components", "app"] -> {
       use <- session
-      use csrf_token <- state.bind(session.read("csrf-token"))
-
-      let request_csrf_token =
-        request.get_query(request)
-        |> result.try(list.key_find(_, "csrf-token"))
-
-      use <- bool.lazy_guard(request_csrf_token != csrf_token, fn() {
-        response.new(403)
-        |> web.text_body("Forbidden")
-        |> state.return
-      })
-
+      use <- check_csrf_token(request)
       use user <- state.bind(get_user())
 
       let status =
@@ -91,6 +80,25 @@ fn set_csrf_token() -> session.State(String) {
       state.return(csrf_token)
     }
   }
+}
+
+fn check_csrf_token(
+  request: web.Request,
+  next: fn() -> session.State(web.Response),
+) -> session.State(web.Response) {
+  use want <- state.bind(session.read("csrf-token"))
+
+  let have =
+    request.get_query(request)
+    |> result.try(list.key_find(_, "csrf-token"))
+
+  use <- bool.lazy_guard(have != want, fn() {
+    response.new(403)
+    |> web.text_body("Forbidden")
+    |> state.return
+  })
+
+  next()
 }
 
 fn get_user() -> session.State(page.User) {
