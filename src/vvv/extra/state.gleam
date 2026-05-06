@@ -13,16 +13,16 @@ pub fn return(v: v) -> State(v, ctx) {
 
 pub fn bind(
   state: State(a, ctx),
-  then: fn(a) -> State(b, ctx),
+  next: fn(a) -> State(b, ctx),
 ) -> State(b, ctx) {
   use ctx <- State
   let #(v, ctx) = state.run(ctx)
-  then(v).run(ctx)
+  next(v).run(ctx)
 }
 
-pub fn do(state: State(a, ctx), then: fn() -> State(b, ctx)) -> State(b, ctx) {
+pub fn do(state: State(a, ctx), next: fn() -> State(b, ctx)) -> State(b, ctx) {
   use _ <- bind(state)
-  then()
+  next()
 }
 
 pub fn get() -> State(ctx, ctx) {
