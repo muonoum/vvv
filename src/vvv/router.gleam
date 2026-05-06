@@ -47,9 +47,9 @@ pub fn service(
     }
 
     http.Get, ["components", "app"] -> {
-      use <- web.check_origin(request, target_origin)
+      use <- web.verify_origin(request, target_origin)
       use <- session
-      use <- check_csrf_token(request)
+      use <- verify_csrf_token(request)
       use user <- state.bind(get_user())
       let status = get_status(request)
 
@@ -77,7 +77,7 @@ fn set_csrf_token() -> session.State(String) {
   }
 }
 
-fn check_csrf_token(
+fn verify_csrf_token(
   request: web.Request,
   next: fn() -> session.State(web.Response),
 ) -> session.State(web.Response) {

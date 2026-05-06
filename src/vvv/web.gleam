@@ -63,7 +63,7 @@ pub fn rescue(handler: fn() -> Response) -> Response {
   }
 }
 
-pub fn check_origin(
+pub fn verify_origin(
   request: Request,
   target_origin: Uri,
   next: fn() -> Response,
