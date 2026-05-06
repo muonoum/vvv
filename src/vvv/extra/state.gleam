@@ -6,14 +6,6 @@ pub fn run(state state: State(v, ctx), context ctx: ctx) -> #(v, ctx) {
   state.run(ctx)
 }
 
-pub fn evaluate(state state: State(v, ctx), context ctx: ctx) -> v {
-  state.run(ctx).0
-}
-
-pub fn execute(state state: State(v, ctx), context ctx: ctx) -> ctx {
-  state.run(ctx).1
-}
-
 pub fn return(v: v) -> State(v, ctx) {
   use ctx <- State
   #(v, ctx)
