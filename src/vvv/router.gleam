@@ -84,13 +84,11 @@ fn check_csrf_token(
     request.get_query(request)
     |> result.try(list.key_find(_, "csrf-token"))
 
-  use <- bool.lazy_guard(have != want, fn() {
-    response.new(403)
-    |> web.text_body("Forbidden")
-    |> state.return
-  })
+  use <- bool.lazy_guard(have == want, next)
 
-  next()
+  response.new(403)
+  |> web.text_body("Forbidden")
+  |> state.return
 }
 
 fn get_user() -> session.State(app.User) {
