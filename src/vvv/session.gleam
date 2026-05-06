@@ -39,7 +39,6 @@ pub opaque type Context {
     data: Dict(String, String),
     flash: Dict(String, String),
     next_flash: Dict(String, String),
-    regenerate: Bool,
   )
 }
 
@@ -68,7 +67,6 @@ fn empty_context() -> Context {
     data: dict.new(),
     flash: dict.new(),
     next_flash: dict.new(),
-    regenerate: False,
   )
 }
 
@@ -106,17 +104,17 @@ pub fn run(
   let #(response, context) = state.run(handler(), last_context)
 
   use <- bool.guard(
-    context.regenerate == False
+    context.id == last_context.id
       && context.data == last_context.data
       && context.next_flash == last_context.flash,
     response,
   )
 
   let id = {
-    use <- bool.guard(context.regenerate == False, context.id)
+    use <- bool.guard(context.id == last_context.id, context.id)
     log.debug("Regenerate session", [])
-    store.delete(context.id)
-    session_id()
+    store.delete(last_context.id)
+    context.id
   }
 
   log.debug("Save session", [])
@@ -128,7 +126,7 @@ pub fn run(
   response.set_cookie(
     response,
     cookie,
-    crypto.sign_message(<<value:utf8>>, <<signing_key:utf8>>, crypto.Sha512),
+    crypto.sign_message(<<value:utf8>>, <<signing_key:utf8>>, crypto.Sha256),
     cookie.Attributes(..cookie.defaults(http.Https), max_age: option.None),
   )
 }
@@ -163,7 +161,7 @@ pub fn id() -> State(String) {
 
 pub fn regenerate() -> State(Nil) {
   use ctx: Context <- state.update
-  Context(..ctx, regenerate: True)
+  Context(..ctx, id: session_id())
 }
 
 pub fn insert(key: String, value: String) -> State(Nil) {
