@@ -17,6 +17,7 @@ import vvv/extra/log
 import vvv/extra/state
 import vvv/web
 
+// TODO: Rydde bort gamle sessions
 pub opaque type Store {
   Store(
     load: fn(String) -> Session,
