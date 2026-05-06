@@ -94,7 +94,7 @@ pub fn run(
     |> result.try(crypto.verify_signed_message(_, <<signing_key:utf8>>))
     |> result.try(bit_array.to_string)
 
-  let context1 = case cookie_value {
+  let last_context = case cookie_value {
     Error(Nil) -> empty_context()
 
     Ok(id) -> {
@@ -103,26 +103,26 @@ pub fn run(
     }
   }
 
-  let #(response, context2) = state.run(handler(), context1)
+  let #(response, context) = state.run(handler(), last_context)
 
   use <- bool.guard(
-    context2.regenerate == False
-      && context1.data == context2.data
-      && context1.flash == context2.next_flash,
+    context.regenerate == False
+      && context.data == last_context.data
+      && context.next_flash == last_context.flash,
     response,
   )
 
   let id = {
-    use <- bool.guard(context2.regenerate == False, context2.id)
+    use <- bool.guard(context.regenerate == False, context.id)
     log.debug("Regenerate session", [])
-    store.delete(context2.id)
+    store.delete(context.id)
     session_id()
   }
 
   log.debug("Save session", [])
 
   let value =
-    Session(data: context2.data, flash: context2.next_flash)
+    Session(data: context.data, flash: context.next_flash)
     |> store.save(id, _)
 
   response.set_cookie(
