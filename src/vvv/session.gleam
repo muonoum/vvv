@@ -57,9 +57,13 @@ pub fn empty_session() -> Session {
   Session(data: dict.new(), flash: dict.new())
 }
 
+fn session_id() -> String {
+  extra.random_string(32)
+}
+
 fn empty_context() -> Context {
   Context(
-    id: extra.random_string(32),
+    id: session_id(),
     data: dict.new(),
     flash: dict.new(),
     next_flash: dict.new(),
@@ -111,7 +115,7 @@ pub fn run(
     use <- bool.guard(context2.regenerate == False, context2.id)
     log.debug("Regenerate session", [])
     store.delete(context2.id)
-    extra.random_string(32)
+    session_id()
   }
 
   log.debug("Save session", [])
