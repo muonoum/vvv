@@ -9,11 +9,7 @@ pub type User =
 
 pub fn view(user: User, status: Option(String)) -> Element(message) {
   html.div([attribute.class("flex gap-2 p-4")], case user {
-    Error(message) -> [
-      login(),
-      html.div([], [element.text("error: " <> message)]),
-      login_status(status),
-    ]
+    Ok(option.None) -> [login(), login_status(status)]
 
     Ok(option.Some(user)) -> [
       logout(),
@@ -21,7 +17,11 @@ pub fn view(user: User, status: Option(String)) -> Element(message) {
       login_status(status),
     ]
 
-    Ok(option.None) -> [login(), login_status(status)]
+    Error(message) -> [
+      login(),
+      html.div([], [element.text("error: " <> message)]),
+      login_status(status),
+    ]
   })
 }
 
