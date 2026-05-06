@@ -8,7 +8,6 @@ import gleam/list
 import gleam/option.{type Option}
 import gleam/result
 import gleam/string
-import gleam/uri
 import lustre/attribute
 import lustre/element.{type Element}
 import lustre/element/html
@@ -17,7 +16,6 @@ import vvv/app
 import vvv/auth
 import vvv/extra
 import vvv/extra/state
-import vvv/page
 import vvv/session
 import vvv/web
 
@@ -95,7 +93,7 @@ fn check_csrf_token(
   next()
 }
 
-fn get_user() -> session.State(page.User) {
+fn get_user() -> session.State(app.User) {
   use login <- state.bind(session.read("login"))
   use <- extra.return(state.return)
 
@@ -134,50 +132,32 @@ fn document(
   csrf_token csrf_token: String,
   csp_nonce csp_nonce: String,
 ) -> session.State(Element(message)) {
-  use user <- state.bind(get_user())
-
-  use status <- state.bind({
-    session.read_flash("status")
-    |> state.map(option.from_result)
-  })
-
-  use <- extra.return(state.return)
-  let query = [#("csrf-token", csrf_token)]
-
-  let app_uri =
-    uri.Uri(..uri.empty, path: "/components/app", query: {
-      option.Some(
-        uri.query_to_string(case status {
-          option.Some(status) -> [#("status", status), ..query]
-          option.None -> query
-        }),
-      )
-    })
-
-  html.html([], [
-    html.head([], [
-      html.title([], title),
-      html.meta([attribute.charset("utf-8")]),
-      html.meta([attribute.name("csrf-token"), attribute.content(csrf_token)]),
-      html.meta([
-        attribute.name("viewport"),
-        attribute.content("width=device-width,initial-scale=1"),
+  state.return(
+    html.html([], [
+      html.head([], [
+        html.title([], title),
+        html.meta([attribute.charset("utf-8")]),
+        html.meta([attribute.name("csrf-token"), attribute.content(csrf_token)]),
+        html.meta([
+          attribute.name("viewport"),
+          attribute.content("width=device-width,initial-scale=1"),
+        ]),
+        html.link([attribute.rel("stylesheet"), attribute.href("/app.css")]),
+        html.script(
+          [
+            attribute.type_("module"),
+            attribute.src("/lustre/lustre-server-component.mjs"),
+            attribute.nonce(csp_nonce),
+          ],
+          "",
+        ),
       ]),
-      html.link([attribute.rel("stylesheet"), attribute.href("/app.css")]),
-      html.script(
-        [
-          attribute.type_("module"),
-          attribute.src("/lustre/lustre-server-component.mjs"),
-          attribute.nonce(csp_nonce),
-        ],
-        "",
-      ),
+      html.body([], [
+        server_component.element(
+          [server_component.route("/components/app")],
+          [],
+        ),
+      ]),
     ]),
-    html.body([], [
-      server_component.element(
-        [server_component.route(uri.to_string(app_uri))],
-        [page.view(user, status)],
-      ),
-    ]),
-  ])
+  )
 }
