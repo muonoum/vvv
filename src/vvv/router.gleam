@@ -44,8 +44,7 @@ pub fn service(
     http.Get, [] -> {
       use csp_nonce <- web.csp_nonce()
       use <- session
-      let csrf_token = extra.random_string(32)
-      use <- state.do(session.insert("csrf-token", csrf_token))
+      use csrf_token <- state.bind(set_csrf_token())
       page_handler(title: "vvv", csrf_token:, csp_nonce:)
     }
 
@@ -77,6 +76,20 @@ pub fn service(
     _method, _segments ->
       response.new(404)
       |> web.text_body("Not Found")
+  }
+}
+
+fn set_csrf_token() -> session.State(String) {
+  use csrf_token <- state.bind(session.read("csrf-token"))
+
+  case csrf_token {
+    Ok(csrf_token) -> state.return(csrf_token)
+
+    Error(Nil) -> {
+      let csrf_token = extra.random_string(32)
+      use <- state.do(session.insert("csrf-token", csrf_token))
+      state.return(csrf_token)
+    }
   }
 }
 
