@@ -159,6 +159,7 @@ pub fn login_handler(
   let authorize_uri = Uri(..config.authorize_uri, query: option.Some(query))
   let login = Login(id_nonce:, state:, code_verifier:, return_path:)
   use <- state.do(session.insert("login", json.to_string(encode_login(login))))
+  use <- state.do(session.regenerate())
 
   uri.to_string(authorize_uri)
   |> response.redirect
@@ -173,6 +174,7 @@ pub fn logout_handler(request: web.Request) -> session.State(web.Response) {
     |> list.key_find("return_path")
     |> result.unwrap("/")
 
+  use <- state.do(session.regenerate())
   use <- state.do(session.delete("login"))
 
   response.redirect(return_path)
@@ -234,6 +236,7 @@ pub fn finalize_handler(
             |> session.insert("login", _)
           })
 
+          use <- state.do(session.regenerate())
           use <- state.do(session.insert_flash("status", "login ok"))
 
           response.redirect(login.return_path)

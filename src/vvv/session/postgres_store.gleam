@@ -43,6 +43,10 @@ const load_session = "
   select data from sessions where id = $1;
 "
 
+const delete_session = "
+  delete from sessions where id = $1;
+"
+
 const save_session = "
   insert into sessions ( id, data ) values ( $1, $2 )
   on conflict ( id ) do update set data = $2;
@@ -67,7 +71,14 @@ pub fn new(
     |> pog.supervised
 
   let connection = pog.named_connection(name)
-  let store = session.store(load: load(connection), save: save(connection))
+
+  let store =
+    session.store(
+      load: load(connection),
+      delete: delete(connection),
+      save: save(connection),
+    )
+
   let supervisor = supervisor.add(supervisor, spec)
   #(store, supervisor, fn() { setup(connection) })
 }
@@ -122,6 +133,20 @@ fn session_decoder() -> Decoder(Session) {
 
 fn parse_value(value: String) -> Result(Session, json.DecodeError) {
   json.parse(value, session.session_decoder())
+}
+
+fn delete(connection: pog.Connection) -> fn(String) -> Nil {
+  use id <- function.identity
+
+  let result =
+    pog.query(delete_session)
+    |> pog.parameter(pog.text(id))
+    |> pog.execute(connection)
+
+  case result {
+    Error(error) -> log.error("Delete session", [log.inspect("error", error)])
+    Ok(pog.Returned(count: _, rows: _)) -> Nil
+  }
 }
 
 fn save(connection: pog.Connection) -> fn(String, Session) -> String {

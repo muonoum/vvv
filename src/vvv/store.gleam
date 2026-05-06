@@ -18,11 +18,16 @@ pub opaque type Model(data) {
 
 pub opaque type Message(data) {
   Save(key: String, data: data)
+  Delete(key: String)
   Load(subject: process.Subject(Result(data, Nil)), key: String)
 }
 
 pub fn save(store: Store(data), key: String, data: data) -> Nil {
   process.send(store, Save(key:, data:))
+}
+
+pub fn delete(store: Store(data), key: String) -> Nil {
+  process.send(store, Delete(key:))
 }
 
 pub fn load(store: Store(data), key: String) -> Result(data, Nil) {
@@ -65,6 +70,11 @@ fn update(
   case message {
     Save(key:, data:) ->
       dict.insert(model.state, key, data)
+      |> Model(state: _)
+      |> actor.continue
+
+    Delete(key:) ->
+      dict.delete(model.state, key)
       |> Model(state: _)
       |> actor.continue
 

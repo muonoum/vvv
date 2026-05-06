@@ -7,7 +7,7 @@ import vvv/session.{type Session}
 pub fn new(
   supervisor: supervisor.Builder,
 ) -> #(session.Store, supervisor.Builder, fn() -> Result(Nil, String)) {
-  #(session.store(load:, save:), supervisor, fn() { Ok(Nil) })
+  #(session.store(load:, delete:, save:), supervisor, fn() { Ok(Nil) })
 }
 
 fn load(value: String) -> Session {
@@ -21,6 +21,10 @@ fn parse_value(value: String) -> Result(Session, Nil) {
   Error(Nil)
 }
 
-fn save(_value: String, data: Session) -> String {
+fn delete(_id: String) -> Nil {
+  Nil
+}
+
+fn save(_id: String, data: Session) -> String {
   session.to_json(data)
 }

@@ -13,13 +13,59 @@ import gleam/list
 import gleam/option
 import gleam/result
 import vvv/extra
+import vvv/extra/log
 import vvv/extra/state
 import vvv/web
 
-// TODO: Regenerate id
+pub opaque type Store {
+  Store(
+    load: fn(String) -> Session,
+    delete: fn(String) -> Nil,
+    save: fn(String, Session) -> String,
+  )
+}
+
+pub opaque type Session {
+  Session(data: Dict(String, String), flash: Dict(String, String))
+}
+
+pub type State(v) =
+  state.State(v, Context)
+
+pub opaque type Context {
+  Context(
+    id: String,
+    data: Dict(String, String),
+    flash: Dict(String, String),
+    next_flash: Dict(String, String),
+    regenerate: Bool,
+  )
+}
 
 pub type Handler =
   fn(fn() -> State(web.Response)) -> web.Response
+
+pub fn store(
+  load load: fn(String) -> Session,
+  delete delete: fn(String) -> Nil,
+  save save: fn(String, Session) -> String,
+) -> Store {
+  Store(load:, delete:, save:)
+}
+
+pub fn empty_session() -> Session {
+  Session(data: dict.new(), flash: dict.new())
+}
+
+fn empty_context() -> Context {
+  Context(
+    id: extra.random_string(32),
+    data: dict.new(),
+    flash: dict.new(),
+    next_flash: dict.new(),
+    regenerate: False,
+  )
+}
 
 pub fn handler(
   request: web.Request,
@@ -37,33 +83,42 @@ pub fn run(
   signing_key signing_key: String,
   handler handler: fn() -> State(web.Response),
 ) -> web.Response {
-  let value =
+  let cookie_value =
     request.get_cookies(request)
     |> list.key_find(cookie)
     |> result.try(crypto.verify_signed_message(_, <<signing_key:utf8>>))
     |> result.try(bit_array.to_string)
 
-  let context1 = case value {
-    Error(Nil) ->
-      Context(
-        value: extra.random_string(32),
-        data: dict.new(),
-        flash: dict.new(),
-        next_flash: dict.new(),
-      )
+  let context1 = case cookie_value {
+    Error(Nil) -> empty_context()
 
-    Ok(value) -> {
-      let Session(data:, flash:) = store.load(value)
-      Context(value:, data:, flash:, next_flash: dict.new())
+    Ok(id) -> {
+      let Session(data:, flash:) = store.load(id)
+      Context(..empty_context(), id:, data:, flash:)
     }
   }
 
   let #(response, context2) = state.run(handler(), context1)
-  use <- bool.guard(!changed(context1, context2), response)
+
+  use <- bool.guard(
+    context2.regenerate == False
+      && context1.data == context2.data
+      && context1.flash == context2.next_flash,
+    response,
+  )
+
+  let id = {
+    use <- bool.guard(!context2.regenerate, context2.id)
+    log.debug("Regenerate session", [])
+    store.delete(context2.id)
+    extra.random_string(32)
+  }
+
+  log.debug("Save session", [])
 
   let value =
     Session(data: context2.data, flash: context2.next_flash)
-    |> store.save(context2.value, _)
+    |> store.save(id, _)
 
   response.set_cookie(
     response,
@@ -71,27 +126,6 @@ pub fn run(
     crypto.sign_message(<<value:utf8>>, <<signing_key:utf8>>, crypto.Sha512),
     cookie.Attributes(..cookie.defaults(http.Https), max_age: option.None),
   )
-}
-
-// STORE
-
-pub opaque type Store {
-  Store(load: fn(String) -> Session, save: fn(String, Session) -> String)
-}
-
-pub opaque type Session {
-  Session(data: Dict(String, String), flash: Dict(String, String))
-}
-
-pub fn store(
-  load load: fn(String) -> Session,
-  save save: fn(String, Session) -> String,
-) -> Store {
-  Store(load:, save:)
-}
-
-pub fn empty_session() -> Session {
-  Session(data: dict.new(), flash: dict.new())
 }
 
 pub fn to_json(session: Session) -> String {
@@ -117,25 +151,15 @@ fn dict_decoder() -> Decoder(Dict(String, String)) {
   decode.dict(decode.string, decode.string)
 }
 
-// CONTEXT
-
-pub opaque type Context {
-  Context(
-    value: String,
-    data: Dict(String, String),
-    flash: Dict(String, String),
-    next_flash: Dict(String, String),
-  )
+pub fn id() -> State(String) {
+  use Context(id:, ..) <- state.bind(state.get())
+  state.return(id)
 }
 
-fn changed(a: Context, b: Context) -> Bool {
-  a.data != b.data || a.flash != b.next_flash
+pub fn regenerate() -> State(Nil) {
+  use ctx: Context <- state.update
+  Context(..ctx, regenerate: True)
 }
-
-// STATE
-
-pub type State(v) =
-  state.State(v, Context)
 
 pub fn insert(key: String, value: String) -> State(Nil) {
   use Context(data:, ..) as ctx <- state.update()
