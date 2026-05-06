@@ -6,7 +6,7 @@ import gleam/http/request
 import gleam/http/response
 import gleam/json
 import gleam/list
-import gleam/option
+import gleam/option.{type Option}
 import gleam/result
 import gleam/string
 import gleam/uri
@@ -52,11 +52,7 @@ pub fn service(
       use <- session
       use <- check_csrf_token(request)
       use user <- state.bind(get_user())
-
-      let status =
-        request.get_query(request)
-        |> result.try(list.key_find(_, "status"))
-        |> option.from_result
+      let status = get_login_status(request)
 
       component.start(request, app, #(user, status))
       |> state.return
@@ -114,6 +110,12 @@ fn get_user() -> session.State(page.User) {
         Ok(auth.Session(user:, ..)) -> Ok(option.Some(user))
       }
   }
+}
+
+fn get_login_status(request: web.Request) -> Option(String) {
+  request.get_query(request)
+  |> result.try(list.key_find(_, "status"))
+  |> option.from_result
 }
 
 fn page_handler(
