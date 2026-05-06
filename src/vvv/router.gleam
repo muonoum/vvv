@@ -15,7 +15,6 @@ import lustre/element/html
 import lustre/server_component
 import vvv/app
 import vvv/auth
-import vvv/component
 import vvv/extra
 import vvv/extra/state
 import vvv/page
@@ -23,7 +22,7 @@ import vvv/session
 import vvv/web
 
 pub fn service(
-  app app: component.Name(app.Arguments, app.Message),
+  app app: app.Component,
   auth_config auth_config: auth.Config,
   session_store store: session.Store,
   static_handler static: fn(web.Request, fn() -> web.Response) -> web.Response,
@@ -53,7 +52,7 @@ pub fn service(
       use user <- state.bind(get_user())
       let status = get_status(request)
 
-      component.start(request, app, #(user, status))
+      app.start(request, app, user:, status:)
       |> state.return
     }
 

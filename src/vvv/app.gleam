@@ -2,13 +2,16 @@ import gleam/option.{type Option}
 import lustre
 import lustre/effect.{type Effect}
 import lustre/element.{type Element}
+import vvv/component
 import vvv/page
+import vvv/web
 
-pub type Arguments =
-  #(page.User, Option(String))
+pub opaque type Args {
+  Args(user: page.User, status: Option(String))
+}
 
-pub type App =
-  lustre.App(Arguments, Model, Message)
+pub type Component =
+  component.Name(Args, Message)
 
 pub opaque type Model {
   Model(user: page.User, status: Option(String))
@@ -16,12 +19,21 @@ pub opaque type Model {
 
 pub type Message
 
-pub fn component() -> App {
+pub fn component() -> lustre.App(Args, Model, Message) {
   lustre.component(init, update, view, options: [])
 }
 
-fn init(args: Arguments) -> #(Model, Effect(Message)) {
-  let #(user, status) = args
+pub fn start(
+  request: web.Request,
+  app: Component,
+  user user: page.User,
+  status status: Option(String),
+) -> web.Response {
+  component.start(request, app, Args(user, status))
+}
+
+fn init(args: Args) -> #(Model, Effect(Message)) {
+  let Args(user:, status:) = args
   #(Model(user: user, status:), effect.none())
 }
 
