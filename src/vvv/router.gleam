@@ -8,6 +8,7 @@ import gleam/list
 import gleam/option.{type Option}
 import gleam/result
 import gleam/string
+import gleam/uri.{type Uri}
 import lustre/attribute
 import lustre/element.{type Element}
 import lustre/element/html
@@ -21,6 +22,7 @@ import vvv/web
 
 pub fn service(
   app app: app.Component,
+  target_origin target_origin: Uri,
   auth_config auth_config: auth.Config,
   session_store store: session.Store,
   static_handler static: fn(web.Request, fn() -> web.Response) -> web.Response,
@@ -45,6 +47,7 @@ pub fn service(
     }
 
     http.Get, ["components", "app"] -> {
+      use <- web.check_origin(request, target_origin)
       use <- session
       use <- check_csrf_token(request)
       use user <- state.bind(get_user())

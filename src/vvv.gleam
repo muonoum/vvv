@@ -10,6 +10,7 @@ import gleam/int
 import gleam/otp/factory_supervisor as factory
 import gleam/otp/static_supervisor as supervisor
 import gleam/result
+import gleam/uri
 import logging
 import lustre
 import vvv/app
@@ -33,6 +34,11 @@ pub fn main() -> Nil {
     envoy.get("HTTP_PORT")
     |> result.try(int.parse)
     as "HTTP_PORT"
+
+  let assert Ok(target_origin) =
+    envoy.get("TARGET_ORIGIN")
+    |> result.try(uri.parse)
+    as "TARGET_ORIGIN"
 
   let signing_key = {
     use <- result.lazy_unwrap(envoy.get("SIGNING_KEY"))
@@ -62,6 +68,7 @@ pub fn main() -> Nil {
   let handler =
     router.service(
       app:,
+      target_origin:,
       auth_config:,
       session_store:,
       static_handler: static_handler(),

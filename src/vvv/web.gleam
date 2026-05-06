@@ -12,7 +12,7 @@ import gleam/int
 import gleam/list
 import gleam/result
 import gleam/string_tree.{type StringTree}
-import gleam/uri
+import gleam/uri.{type Uri}
 import marceau
 import simplifile
 import vvv/extra
@@ -61,6 +61,20 @@ pub fn rescue(handler: fn() -> Response) -> Response {
       |> response.set_body(ewe.TextData("Internal Server Error"))
     }
   }
+}
+
+pub fn check_origin(
+  request: Request,
+  target_origin: Uri,
+  next: fn() -> Response,
+) -> Response {
+  let origin =
+    request.get_header(request, "origin")
+    |> result.lazy_or(fn() { request.get_header(request, "referer") })
+    |> result.try(uri.parse)
+
+  use <- bool.lazy_guard(origin == Ok(target_origin), next)
+  text_body(response.new(400), "Bad Request")
 }
 
 pub fn csp_nonce(handler: fn(String) -> Response) -> Response {
