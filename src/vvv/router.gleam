@@ -51,7 +51,7 @@ pub fn service(
       use <- session
       use <- check_csrf_token(request)
       use user <- state.bind(get_user())
-      let status = get_login_status(request)
+      let status = get_status(request)
 
       component.start(request, app, #(user, status))
       |> state.return
@@ -111,7 +111,7 @@ fn get_user() -> session.State(page.User) {
   }
 }
 
-fn get_login_status(request: web.Request) -> Option(String) {
+fn get_status(request: web.Request) -> Option(String) {
   request.get_query(request)
   |> result.try(list.key_find(_, "status"))
   |> option.from_result
