@@ -108,7 +108,7 @@ pub fn run(
   )
 
   let id = {
-    use <- bool.guard(!context2.regenerate, context2.id)
+    use <- bool.guard(context2.regenerate == False, context2.id)
     log.debug("Regenerate session", [])
     store.delete(context2.id)
     extra.random_string(32)
