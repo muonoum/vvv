@@ -11,6 +11,7 @@ import gleam/http/response
 import gleam/int
 import gleam/list
 import gleam/result
+import gleam/string_tree.{type StringTree}
 import gleam/uri
 import marceau
 import simplifile
@@ -78,6 +79,12 @@ pub fn text_body(response: response.Response(v), text: String) -> Response {
   response
   |> response.set_header("content-type", "text/plain")
   |> response.set_body(ewe.TextData(text))
+}
+
+pub fn html_body(response: response.Response(v), html: StringTree) -> Response {
+  response
+  |> response.set_header("content-type", "text/html; charset=utf-8")
+  |> response.set_body(ewe.StringTreeData(html))
 }
 
 pub fn empty_body(response: response.Response(v)) -> Response {

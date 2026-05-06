@@ -1,4 +1,3 @@
-import ewe
 import gleam/bool
 import gleam/function
 import gleam/http
@@ -127,10 +126,7 @@ fn page_handler(
 
   state.return(
     response.new(200)
-    |> response.set_header("content-type", "text/html; charset=utf-8")
-    |> response.set_body(
-      ewe.StringTreeData(element.to_document_string_tree(document)),
-    ),
+    |> web.html_body(element.to_document_string_tree(document)),
   )
 }
 
