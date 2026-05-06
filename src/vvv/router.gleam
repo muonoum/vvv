@@ -126,15 +126,15 @@ fn page_handler(
   csrf_token csrf_token: String,
   csp_nonce csp_nonce: String,
 ) -> session.State(web.Response) {
-  use document <- state.bind(document(title:, csrf_token:, csp_nonce:))
+  use page <- state.bind(page(title:, csrf_token:, csp_nonce:))
 
   state.return(
     response.new(200)
-    |> web.html_body(element.to_document_string_tree(document)),
+    |> web.html_body(element.to_document_string_tree(page)),
   )
 }
 
-fn document(
+fn page(
   title title: String,
   csrf_token csrf_token: String,
   csp_nonce csp_nonce: String,
