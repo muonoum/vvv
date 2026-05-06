@@ -26,18 +26,13 @@ import vvv/web
 pub fn main() -> Nil {
   log.configure(logging.Debug)
 
-  let http_address =
-    envoy.get("HTTP_ADDRESS")
-    |> result.unwrap("localhost")
+  let http_address = result.unwrap(envoy.get("HTTP_ADDRESS"), "localhost")
 
-  let assert Ok(http_port) =
-    envoy.get("HTTP_PORT")
-    |> result.try(int.parse)
+  let assert Ok(http_port) = result.try(envoy.get("HTTP_PORT"), int.parse)
     as "HTTP_PORT"
 
   let assert Ok(target_origin) =
-    envoy.get("TARGET_ORIGIN")
-    |> result.try(uri.parse)
+    result.try(envoy.get("TARGET_ORIGIN"), uri.parse)
     as "TARGET_ORIGIN"
 
   let signing_key = {
