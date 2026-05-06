@@ -39,8 +39,7 @@ pub fn start(
 }
 
 fn init(args: Args) -> #(Model, Effect(Message)) {
-  let Args(user:, status:) = args
-  #(Model(user: user, status:), effect.none())
+  #(Model(user: args.user, status: args.status), effect.none())
 }
 
 fn update(model: Model, _message: Message) -> #(Model, Effect(Message)) {
