@@ -2,6 +2,12 @@ import gleam/bit_array
 import gleam/crypto
 import gleam/erlang/charlist.{type Charlist}
 import gleam/list
+import gleam/string
+import lustre/attribute.{type Attribute}
+
+pub fn classes(names: List(String)) -> Attribute(message) {
+  attribute.class(string.join(names, " "))
+}
 
 @external(erlang, "timer", "tc")
 pub fn time(fun: fn() -> a) -> #(Int, a)

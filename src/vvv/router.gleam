@@ -176,9 +176,8 @@ fn document(
     html.body([], [
       server_component.element(
         [server_component.route(uri.to_string(app_uri))],
-        [],
+        [page.view(user, status)],
       ),
-      page.view(user, status),
     ]),
   ])
 }
