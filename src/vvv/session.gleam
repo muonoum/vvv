@@ -179,12 +179,6 @@ pub fn delete(key: String) -> State(Nil) {
   Context(..ctx, data: dict.delete(data, key))
 }
 
-pub fn take(key: String) -> State(Result(String, Nil)) {
-  use value <- state.bind(read(key))
-  use <- state.do(delete(key))
-  state.return(value)
-}
-
 pub fn insert_flash(key: String, value: String) -> State(Nil) {
   use Context(next_flash:, ..) as ctx <- state.update()
   Context(..ctx, next_flash: dict.insert(next_flash, key, value))
