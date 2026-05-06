@@ -154,11 +154,6 @@ fn dict_decoder() -> Decoder(Dict(String, String)) {
   decode.dict(decode.string, decode.string)
 }
 
-pub fn id() -> State(String) {
-  use Context(id:, ..) <- state.bind(state.get())
-  state.return(id)
-}
-
 pub fn regenerate() -> State(Nil) {
   use ctx: Context <- state.update
   Context(..ctx, id: session_id())
