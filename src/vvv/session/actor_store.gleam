@@ -7,7 +7,7 @@ import vvv/store.{type Store}
 
 pub fn new(
   supervisor: supervisor.Builder,
-) -> #(session.Store, supervisor.Builder, fn() -> Result(Nil, a)) {
+) -> #(session.Store, supervisor.Builder, fn() -> Result(Nil, String)) {
   let name = process.new_name("store")
   let subject = process.named_subject(name)
 
@@ -23,10 +23,12 @@ pub fn new(
   #(store, supervisor, fn() { Ok(Nil) })
 }
 
-fn save(store: Store(Session)) -> fn(String, Session) -> String {
-  use id, data <- function.identity
+fn save(
+  store: Store(Session),
+) -> fn(session.Save) -> Result(String, session.Error) {
+  use session.Save(id:, data:) <- function.identity
   store.save(store, id, data)
-  id
+  Ok(id)
 }
 
 fn load(store: Store(Session)) -> fn(String) -> Session {
@@ -39,9 +41,11 @@ fn delete(store: Store(Session)) -> fn(String) -> Nil {
   store.delete(store, id)
 }
 
-fn replace(store: Store(Session)) -> fn(String, String, Session) -> String {
-  use old_id, new_id, data <- function.identity
-  store.delete(store, old_id)
-  store.save(store, new_id, data)
-  new_id
+fn replace(
+  store: Store(Session),
+) -> fn(session.Replace) -> Result(String, session.Error) {
+  use session.Replace(next_id:, previous_id:, data:) <- function.identity
+  store.delete(store, previous_id)
+  store.save(store, next_id, data)
+  Ok(next_id)
 }

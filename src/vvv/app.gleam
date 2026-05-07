@@ -60,7 +60,7 @@ fn view(model: Model) -> Element(Message) {
     ]
 
     Error(message) -> [
-      html.div([], [element.text("error: " <> message)]),
+      html.div([], [element.text("error: " <> echo message)]),
       login_link(),
     ]
   })

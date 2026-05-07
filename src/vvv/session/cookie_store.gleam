@@ -10,8 +10,9 @@ pub fn new(
   #(session.store(save:, load:, delete:, replace:), supervisor, fn() { Ok(Nil) })
 }
 
-fn save(_id: String, data: Session) -> String {
-  session.to_json(data)
+fn save(save: session.Save) -> Result(String, session.Error) {
+  let session.Save(data:, ..) = save
+  Ok(session.to_json(data))
 }
 
 fn load(value: String) -> Session {
@@ -29,6 +30,7 @@ fn delete(_id: String) -> Nil {
   Nil
 }
 
-fn replace(_old_id: String, new_id: String, data: Session) -> String {
-  save(new_id, data)
+fn replace(replace: session.Replace) -> Result(String, session.Error) {
+  let session.Replace(data:, ..) = replace
+  Ok(session.to_json(data))
 }
