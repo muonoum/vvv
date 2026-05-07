@@ -98,9 +98,7 @@ fn setup(connection: pog.Connection) -> Result(Nil, String) {
   |> result.replace(Nil)
 }
 
-fn save(
-  connection: pog.Connection,
-) -> fn(session.Save) -> Result(String, session.Error) {
+fn save(connection: pog.Connection) -> fn(session.Save) -> Result(String, Nil) {
   use session.Save(id:, session:) <- function.identity
 
   case save_session(connection, id, session) {
@@ -108,7 +106,7 @@ fn save(
 
     Error(error) -> {
       log.error("Save session", [log.inspect("error", error)])
-      Error(session.ErrorMessage("TODO"))
+      Error(Nil)
     }
   }
 }
@@ -143,7 +141,7 @@ fn delete(connection: pog.Connection) -> fn(String) -> Nil {
 
 fn replace(
   connection: pog.Connection,
-) -> fn(session.Replace) -> Result(String, session.Error) {
+) -> fn(session.Replace) -> Result(String, Nil) {
   use session.Replace(next_id:, previous_id:, session:) <- function.identity
 
   let result = {
@@ -157,7 +155,7 @@ fn replace(
 
     Error(error) -> {
       log.error("Replace session", [log.inspect("error", error)])
-      Error(session.ErrorMessage("TODO"))
+      Error(Nil)
     }
   }
 }

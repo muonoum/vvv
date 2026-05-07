@@ -23,9 +23,7 @@ pub fn new(
   #(store, supervisor, fn() { Ok(Nil) })
 }
 
-fn save(
-  store: Store(Session),
-) -> fn(session.Save) -> Result(String, session.Error) {
+fn save(store: Store(Session)) -> fn(session.Save) -> Result(String, Nil) {
   use session.Save(id:, session:) <- function.identity
   store.save(store, id, session)
   Ok(id)
@@ -43,7 +41,7 @@ fn delete(store: Store(Session)) -> fn(String) -> Nil {
 
 fn replace(
   store: Store(Session),
-) -> fn(session.Replace) -> Result(String, session.Error) {
+) -> fn(session.Replace) -> Result(String, Nil) {
   use session.Replace(next_id:, previous_id:, session:) <- function.identity
   store.delete(store, previous_id)
   store.save(store, next_id, session)

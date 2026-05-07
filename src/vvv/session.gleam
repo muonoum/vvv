@@ -20,10 +20,10 @@ import vvv/web
 // TODO: Rydde bort gamle sessions
 pub opaque type Store {
   Store(
-    save: fn(Save) -> Result(String, Error),
+    save: fn(Save) -> Result(String, Nil),
     load: fn(String) -> Session,
     delete: fn(String) -> Nil,
-    replace: fn(Replace) -> Result(String, Error),
+    replace: fn(Replace) -> Result(String, Nil),
   )
 }
 
@@ -33,10 +33,6 @@ pub type Save {
 
 pub type Replace {
   Replace(next_id: String, previous_id: String, session: Session)
-}
-
-pub type Error {
-  ErrorMessage(String)
 }
 
 pub opaque type Session {
@@ -59,10 +55,10 @@ pub type Handler =
   fn(fn() -> State(web.Response)) -> web.Response
 
 pub fn store(
-  save save: fn(Save) -> Result(String, Error),
+  save save: fn(Save) -> Result(String, Nil),
   load load: fn(String) -> Session,
   delete delete: fn(String) -> Nil,
-  replace replace: fn(Replace) -> Result(String, Error),
+  replace replace: fn(Replace) -> Result(String, Nil),
 ) -> Store {
   Store(load:, delete:, save:, replace:)
 }
