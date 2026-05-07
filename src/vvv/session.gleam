@@ -125,18 +125,17 @@ pub fn run(
   )
 
   let result = {
-    let session = Session(data: context.data, flash: context.next_flash)
+    let data = Session(data: context.data, flash: context.next_flash)
 
-    case context.id == last_context.id {
-      True -> store.save(Save(id: context.id, data: session))
+    use <- bool.lazy_guard(context.id == last_context.id, fn() {
+      store.save(Save(id: context.id, data:))
+    })
 
-      False ->
-        store.replace(Replace(
-          next_id: context.id,
-          previous_id: last_context.id,
-          data: session,
-        ))
-    }
+    store.replace(Replace(
+      next_id: context.id,
+      previous_id: last_context.id,
+      data:,
+    ))
   }
 
   case result {
