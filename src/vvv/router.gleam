@@ -139,6 +139,21 @@ fn page(
   csrf_token csrf_token: String,
   csp_nonce csp_nonce: String,
 ) -> session.State(Element(message)) {
+  use status <- state.bind({
+    session.read_flash("status")
+    |> state.map(option.from_result)
+  })
+
+  let app_uri =
+    uri.Uri(..uri.empty, path: "/components/app", query: {
+      option.Some(
+        uri.query_to_string(case status {
+          option.Some(status) -> [#("status", status)]
+          option.None -> []
+        }),
+      )
+    })
+
   state.return(
     html.html([], [
       html.head([], [
@@ -161,7 +176,7 @@ fn page(
       ]),
       html.body([], [
         server_component.element(
-          [server_component.route("/components/app")],
+          [server_component.route(uri.to_string(app_uri))],
           [],
         ),
       ]),
