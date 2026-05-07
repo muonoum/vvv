@@ -11,8 +11,8 @@ pub fn new(
 }
 
 fn save(save: session.Save) -> Result(String, session.Error) {
-  let session.Save(data:, ..) = save
-  Ok(session.to_json(data))
+  let session.Save(session:, ..) = save
+  Ok(session.to_json(session))
 }
 
 fn load(value: String) -> Session {
@@ -31,6 +31,6 @@ fn delete(_id: String) -> Nil {
 }
 
 fn replace(replace: session.Replace) -> Result(String, session.Error) {
-  let session.Replace(data:, ..) = replace
-  Ok(session.to_json(data))
+  let session.Replace(session:, ..) = replace
+  Ok(session.to_json(session))
 }
