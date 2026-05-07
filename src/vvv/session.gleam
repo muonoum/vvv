@@ -20,11 +20,23 @@ import vvv/web
 // TODO: Rydde bort gamle sessions
 pub opaque type Store {
   Store(
-    save: fn(String, Session) -> String,
+    save: fn(Save) -> Result(String, Error),
     load: fn(String) -> Session,
     delete: fn(String) -> Nil,
-    replace: fn(String, String, Session) -> String,
+    replace: fn(Replace) -> Result(String, Error),
   )
+}
+
+pub type Save {
+  Save(id: String, data: Session)
+}
+
+pub type Replace {
+  Replace(next_id: String, previous_id: String, data: Session)
+}
+
+pub type Error {
+  ErrorMessage(String)
 }
 
 pub opaque type Session {
@@ -47,10 +59,10 @@ pub type Handler =
   fn(fn() -> State(web.Response)) -> web.Response
 
 pub fn store(
-  save save: fn(String, Session) -> String,
+  save save: fn(Save) -> Result(String, Error),
   load load: fn(String) -> Session,
   delete delete: fn(String) -> Nil,
-  replace replace: fn(String, String, Session) -> String,
+  replace replace: fn(Replace) -> Result(String, Error),
 ) -> Store {
   Store(load:, delete:, save:, replace:)
 }
@@ -112,22 +124,58 @@ pub fn run(
     response,
   )
 
-  let value = {
-    log.debug("Save session", [])
+  let result = {
     let session = Session(data: context.data, flash: context.next_flash)
 
     case context.id == last_context.id {
-      False -> store.replace(last_context.id, context.id, session)
-      True -> store.save(context.id, session)
+      True -> store.save(Save(id: context.id, data: session))
+
+      False ->
+        store.replace(Replace(
+          next_id: context.id,
+          previous_id: last_context.id,
+          data: session,
+        ))
     }
   }
 
-  response.set_cookie(
-    response,
-    cookie,
-    crypto.sign_message(<<value:utf8>>, <<signing_key:utf8>>, crypto.Sha256),
-    cookie.Attributes(..cookie.defaults(http.Https), max_age: option.None),
-  )
+  case result {
+    Error(error) -> {
+      log.error("Save session", [log.inspect("error", error)])
+
+      response.new(500)
+      |> web.text_body("Internal Server Error")
+      |> delete_cookie(cookie)
+    }
+
+    Ok(value) -> {
+      log.debug("Save session", [])
+      set_cookie(response, name: cookie, value:, signing_key:)
+    }
+  }
+}
+
+fn set_cookie(
+  response: response.Response(_),
+  name name: String,
+  value value: String,
+  signing_key signing_key: String,
+) -> response.Response(a) {
+  let value =
+    crypto.sign_message(<<value:utf8>>, <<signing_key:utf8>>, crypto.Sha256)
+
+  let attributes = cookie.defaults(http.Https)
+  let attributes = cookie.Attributes(..attributes, max_age: option.None)
+  response.set_cookie(response, name, value, attributes)
+}
+
+fn delete_cookie(
+  response: response.Response(_),
+  name name: String,
+) -> response.Response(a) {
+  let attributes = cookie.defaults(http.Https)
+  let attributes = cookie.Attributes(..attributes, max_age: option.Some(0))
+  response.set_cookie(response, name, "", attributes)
 }
 
 pub fn to_json(session: Session) -> String {

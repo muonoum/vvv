@@ -98,23 +98,25 @@ fn setup(connection: pog.Connection) -> Result(Nil, String) {
   |> result.replace(Nil)
 }
 
-fn save(connection: pog.Connection) -> fn(String, Session) -> String {
-  use id, data <- function.identity
-  let result = save_session(connection, id, data)
+fn save(
+  connection: pog.Connection,
+) -> fn(session.Save) -> Result(String, session.Error) {
+  use session.Save(id:, data:) <- function.identity
 
-  case result {
-    Ok(pog.Returned(..)) -> Nil
-    Error(error) -> log.error("Save session", [log.inspect("error", error)])
+  case save_session(connection, id, data) {
+    Ok(pog.Returned(..)) -> Ok(id)
+
+    Error(error) -> {
+      log.error("Save session", [log.inspect("error", error)])
+      Error(session.ErrorMessage("TODO"))
+    }
   }
-
-  id
 }
 
 fn load(connection: pog.Connection) -> fn(String) -> Session {
   use id: String <- function.identity
-  let result = load_session(connection, id)
 
-  case result {
+  case load_session(connection, id) {
     Ok(pog.Returned(rows: [data], ..)) -> data
     Ok(pog.Returned(rows: [], ..)) -> session.empty_session()
 
@@ -132,9 +134,8 @@ fn load(connection: pog.Connection) -> fn(String) -> Session {
 
 fn delete(connection: pog.Connection) -> fn(String) -> Nil {
   use id <- function.identity
-  let result = delete_session(connection, id)
 
-  case result {
+  case delete_session(connection, id) {
     Ok(pog.Returned(..)) -> Nil
     Error(error) -> log.error("Delete session", [log.inspect("error", error)])
   }
@@ -142,22 +143,23 @@ fn delete(connection: pog.Connection) -> fn(String) -> Nil {
 
 fn replace(
   connection: pog.Connection,
-) -> fn(String, String, Session) -> String {
-  use old_id, new_id, data <- function.identity
+) -> fn(session.Replace) -> Result(String, session.Error) {
+  use session.Replace(next_id:, previous_id:, data:) <- function.identity
 
   let result = {
     use connection <- pog.transaction(connection)
-    use _ <- result.try(delete_session(connection, old_id))
-    save_session(connection, new_id, data)
+    use _ <- result.try(delete_session(connection, previous_id))
+    save_session(connection, next_id, data)
   }
 
   case result {
-    Ok(pog.Returned(..)) -> Nil
+    Ok(pog.Returned(..)) -> Ok(next_id)
 
-    Error(error) -> log.error("Replace session", [log.inspect("error", error)])
+    Error(error) -> {
+      log.error("Replace session", [log.inspect("error", error)])
+      Error(session.ErrorMessage("TODO"))
+    }
   }
-
-  new_id
 }
 
 fn load_session(
