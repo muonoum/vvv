@@ -13,7 +13,7 @@ import vvv/extra
 import vvv/extra/log
 import vvv/session.{type Session}
 
-const create_table = "
+const create_table_sql = "
   create table if not exists sessions (
     id text primary key,
     updated_at timestamp without time zone not null,
@@ -21,7 +21,7 @@ const create_table = "
   );
 "
 
-const create_update_function = "
+const create_update_function_sql = "
   create or replace function update_session()
   returns trigger
   language plpgsql
@@ -33,21 +33,21 @@ const create_update_function = "
   $$;
 "
 
-const create_update_trigger = "
+const create_update_trigger_sql = "
   create or replace trigger update_session
   before insert or update on sessions
   for each row execute function update_session();
 "
 
-const load_session = "
+const load_session_sql = "
   select data from sessions where id = $1;
 "
 
-const delete_session = "
+const delete_session_sql = "
   delete from sessions where id = $1;
 "
 
-const save_session = "
+const save_session_sql = "
   insert into sessions ( id, data ) values ( $1, $2 )
   on conflict ( id ) do update set data = $2;
 "
@@ -74,9 +74,10 @@ pub fn new(
 
   let store =
     session.store(
+      save: save(connection),
       load: load(connection),
       delete: delete(connection),
-      save: save(connection),
+      replace: replace(connection),
     )
 
   let supervisor = supervisor.add(supervisor, spec)
@@ -86,21 +87,32 @@ pub fn new(
 fn setup(connection: pog.Connection) -> Result(Nil, String) {
   use <- extra.return(result.map_error(_, string.inspect))
   use connection <- pog.transaction(connection)
-  let queries = [create_table, create_update_function, create_update_trigger]
-  use Nil, query <- list.try_fold(queries, Nil)
+
+  use Nil, query <- list.try_fold(from: Nil, over: [
+    create_table_sql,
+    create_update_function_sql,
+    create_update_trigger_sql,
+  ])
 
   pog.execute(pog.query(query), connection)
   |> result.replace(Nil)
 }
 
+fn save(connection: pog.Connection) -> fn(String, Session) -> String {
+  use id, data <- function.identity
+  let result = save_session(connection, id, data)
+
+  case result {
+    Ok(pog.Returned(..)) -> Nil
+    Error(error) -> log.error("Save session", [log.inspect("error", error)])
+  }
+
+  id
+}
+
 fn load(connection: pog.Connection) -> fn(String) -> Session {
   use id: String <- function.identity
-
-  let result =
-    pog.query(load_session)
-    |> pog.parameter(pog.text(id))
-    |> pog.returning(session_decoder())
-    |> pog.execute(connection)
+  let result = load_session(connection, id)
 
   case result {
     Ok(pog.Returned(rows: [data], ..)) -> data
@@ -118,10 +130,50 @@ fn load(connection: pog.Connection) -> fn(String) -> Session {
   }
 }
 
+fn delete(connection: pog.Connection) -> fn(String) -> Nil {
+  use id <- function.identity
+  let result = delete_session(connection, id)
+
+  case result {
+    Ok(pog.Returned(..)) -> Nil
+    Error(error) -> log.error("Delete session", [log.inspect("error", error)])
+  }
+}
+
+fn replace(
+  connection: pog.Connection,
+) -> fn(String, String, Session) -> String {
+  use old_id, new_id, data <- function.identity
+
+  let result = {
+    use connection <- pog.transaction(connection)
+    use _ <- result.try(delete_session(connection, old_id))
+    save_session(connection, new_id, data)
+  }
+
+  case result {
+    Ok(pog.Returned(..)) -> Nil
+
+    Error(error) -> log.error("Replace session", [log.inspect("error", error)])
+  }
+
+  new_id
+}
+
+fn load_session(
+  connection: pog.Connection,
+  id: String,
+) -> Result(pog.Returned(Session), pog.QueryError) {
+  pog.query(load_session_sql)
+  |> pog.parameter(pog.text(id))
+  |> pog.returning(session_decoder())
+  |> pog.execute(connection)
+}
+
 fn session_decoder() -> Decoder(Session) {
   use data <- decode.then(decode.at([0], decode.string))
 
-  case parse_value(data) {
+  case json.parse(data, session.session_decoder()) {
     Ok(data) -> decode.success(data)
 
     Error(error) -> {
@@ -131,37 +183,22 @@ fn session_decoder() -> Decoder(Session) {
   }
 }
 
-fn parse_value(value: String) -> Result(Session, json.DecodeError) {
-  json.parse(value, session.session_decoder())
+fn save_session(
+  connection: pog.Connection,
+  id: String,
+  data: Session,
+) -> Result(pog.Returned(Nil), pog.QueryError) {
+  pog.query(save_session_sql)
+  |> pog.parameter(pog.text(id))
+  |> pog.parameter(pog.text(session.to_json(data)))
+  |> pog.execute(connection)
 }
 
-fn delete(connection: pog.Connection) -> fn(String) -> Nil {
-  use id <- function.identity
-
-  let result =
-    pog.query(delete_session)
-    |> pog.parameter(pog.text(id))
-    |> pog.execute(connection)
-
-  case result {
-    Error(error) -> log.error("Delete session", [log.inspect("error", error)])
-    Ok(pog.Returned(count: _, rows: _)) -> Nil
-  }
-}
-
-fn save(connection: pog.Connection) -> fn(String, Session) -> String {
-  use id, data <- function.identity
-
-  let result =
-    pog.query(save_session)
-    |> pog.parameter(pog.text(id))
-    |> pog.parameter(pog.text(session.to_json(data)))
-    |> pog.execute(connection)
-
-  case result {
-    Error(error) -> log.error("Save session", [log.inspect("error", error)])
-    Ok(pog.Returned(count: _, rows: _)) -> Nil
-  }
-
-  id
+fn delete_session(
+  connection: pog.Connection,
+  id: String,
+) -> Result(pog.Returned(Nil), pog.QueryError) {
+  pog.query(delete_session_sql)
+  |> pog.parameter(pog.text(id))
+  |> pog.execute(connection)
 }

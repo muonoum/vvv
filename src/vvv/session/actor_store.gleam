@@ -13,13 +13,20 @@ pub fn new(
 
   let store =
     session.store(
+      save: save(subject),
       load: load(subject),
       delete: delete(subject),
-      save: save(subject),
+      replace: replace(subject),
     )
 
   let supervisor = supervisor.add(supervisor, store.supervised(name))
   #(store, supervisor, fn() { Ok(Nil) })
+}
+
+fn save(store: Store(Session)) -> fn(String, Session) -> String {
+  use id, data <- function.identity
+  store.save(store, id, data)
+  id
 }
 
 fn load(store: Store(Session)) -> fn(String) -> Session {
@@ -32,8 +39,9 @@ fn delete(store: Store(Session)) -> fn(String) -> Nil {
   store.delete(store, id)
 }
 
-fn save(store: Store(Session)) -> fn(String, Session) -> String {
-  use id, data <- function.identity
-  store.save(store, id, data)
-  id
+fn replace(store: Store(Session)) -> fn(String, String, Session) -> String {
+  use old_id, new_id, data <- function.identity
+  store.delete(store, old_id)
+  store.save(store, new_id, data)
+  new_id
 }

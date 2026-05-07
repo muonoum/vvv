@@ -20,9 +20,10 @@ import vvv/web
 // TODO: Rydde bort gamle sessions
 pub opaque type Store {
   Store(
+    save: fn(String, Session) -> String,
     load: fn(String) -> Session,
     delete: fn(String) -> Nil,
-    save: fn(String, Session) -> String,
+    replace: fn(String, String, Session) -> String,
   )
 }
 
@@ -46,24 +47,25 @@ pub type Handler =
   fn(fn() -> State(web.Response)) -> web.Response
 
 pub fn store(
+  save save: fn(String, Session) -> String,
   load load: fn(String) -> Session,
   delete delete: fn(String) -> Nil,
-  save save: fn(String, Session) -> String,
+  replace replace: fn(String, String, Session) -> String,
 ) -> Store {
-  Store(load:, delete:, save:)
+  Store(load:, delete:, save:, replace:)
 }
 
 pub fn empty_session() -> Session {
   Session(data: dict.new(), flash: dict.new())
 }
 
-fn session_id() -> String {
+fn make_session_id() -> String {
   extra.random_string(32)
 }
 
 fn empty_context() -> Context {
   Context(
-    id: session_id(),
+    id: make_session_id(),
     data: dict.new(),
     flash: dict.new(),
     next_flash: dict.new(),
@@ -110,18 +112,15 @@ pub fn run(
     response,
   )
 
-  let id = {
-    use <- bool.guard(context.id == last_context.id, context.id)
-    log.debug("Regenerate session", [])
-    store.delete(last_context.id)
-    context.id
+  let value = {
+    log.debug("Save session", [])
+    let session = Session(data: context.data, flash: context.next_flash)
+
+    case context.id == last_context.id {
+      False -> store.replace(last_context.id, context.id, session)
+      True -> store.save(context.id, session)
+    }
   }
-
-  log.debug("Save session", [])
-
-  let value =
-    Session(data: context.data, flash: context.next_flash)
-    |> store.save(id, _)
 
   response.set_cookie(
     response,
@@ -154,9 +153,9 @@ fn dict_decoder() -> Decoder(Dict(String, String)) {
   decode.dict(decode.string, decode.string)
 }
 
-pub fn regenerate() -> State(Nil) {
+pub fn replace() -> State(Nil) {
   use ctx: Context <- state.update
-  Context(..ctx, id: session_id())
+  Context(..ctx, id: make_session_id())
 }
 
 pub fn insert(key: String, value: String) -> State(Nil) {

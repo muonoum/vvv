@@ -10,6 +10,7 @@ pub opaque type Field {
 pub opaque type Value {
   String(String)
   Int(Int)
+  Bool(Bool)
 }
 
 pub fn configure(level: logging.LogLevel) -> Nil {
@@ -23,6 +24,10 @@ pub fn string(key: String, value: String) -> Field {
 
 pub fn int(key: String, value: Int) -> Field {
   Field(key:, value: Int(value))
+}
+
+pub fn bool(key: String, value: Bool) -> Field {
+  Field(key:, value: Bool(value))
 }
 
 pub fn inspect(key: String, value: v) -> Field {
@@ -78,5 +83,7 @@ fn format_value(value: Value) -> String {
   case value {
     String(string) -> string
     Int(int) -> int.to_string(int)
+    Bool(False) -> "false"
+    Bool(True) -> "true"
   }
 }
