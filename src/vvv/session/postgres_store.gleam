@@ -101,9 +101,9 @@ fn setup(connection: pog.Connection) -> Result(Nil, String) {
 fn save(
   connection: pog.Connection,
 ) -> fn(session.Save) -> Result(String, session.Error) {
-  use session.Save(id:, data:) <- function.identity
+  use session.Save(id:, session:) <- function.identity
 
-  case save_session(connection, id, data) {
+  case save_session(connection, id, session) {
     Ok(pog.Returned(..)) -> Ok(id)
 
     Error(error) -> {
@@ -117,7 +117,7 @@ fn load(connection: pog.Connection) -> fn(String) -> Session {
   use id: String <- function.identity
 
   case load_session(connection, id) {
-    Ok(pog.Returned(rows: [data], ..)) -> data
+    Ok(pog.Returned(rows: [session], ..)) -> session
     Ok(pog.Returned(rows: [], ..)) -> session.empty_session()
 
     Ok(pog.Returned(..) as unexpected) -> {
@@ -144,12 +144,12 @@ fn delete(connection: pog.Connection) -> fn(String) -> Nil {
 fn replace(
   connection: pog.Connection,
 ) -> fn(session.Replace) -> Result(String, session.Error) {
-  use session.Replace(next_id:, previous_id:, data:) <- function.identity
+  use session.Replace(next_id:, previous_id:, session:) <- function.identity
 
   let result = {
     use connection <- pog.transaction(connection)
     use _ <- result.try(delete_session(connection, previous_id))
-    save_session(connection, next_id, data)
+    save_session(connection, next_id, session)
   }
 
   case result {
@@ -160,6 +160,17 @@ fn replace(
       Error(session.ErrorMessage("TODO"))
     }
   }
+}
+
+fn save_session(
+  connection: pog.Connection,
+  id: String,
+  session: Session,
+) -> Result(pog.Returned(Nil), pog.QueryError) {
+  pog.query(save_session_sql)
+  |> pog.parameter(pog.text(id))
+  |> pog.parameter(pog.text(session.to_json(session)))
+  |> pog.execute(connection)
 }
 
 fn load_session(
@@ -173,27 +184,16 @@ fn load_session(
 }
 
 fn session_decoder() -> Decoder(Session) {
-  use data <- decode.then(decode.at([0], decode.string))
+  use string <- decode.then(decode.at([0], decode.string))
 
-  case json.parse(data, session.session_decoder()) {
-    Ok(data) -> decode.success(data)
+  case json.parse(string, session.session_decoder()) {
+    Ok(session) -> decode.success(session)
 
     Error(error) -> {
       log.warning("Decode session", [log.inspect("error", error)])
       decode.success(session.empty_session())
     }
   }
-}
-
-fn save_session(
-  connection: pog.Connection,
-  id: String,
-  data: Session,
-) -> Result(pog.Returned(Nil), pog.QueryError) {
-  pog.query(save_session_sql)
-  |> pog.parameter(pog.text(id))
-  |> pog.parameter(pog.text(session.to_json(data)))
-  |> pog.execute(connection)
 }
 
 fn delete_session(

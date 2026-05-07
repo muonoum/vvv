@@ -28,11 +28,11 @@ pub opaque type Store {
 }
 
 pub type Save {
-  Save(id: String, data: Session)
+  Save(id: String, session: Session)
 }
 
 pub type Replace {
-  Replace(next_id: String, previous_id: String, data: Session)
+  Replace(next_id: String, previous_id: String, session: Session)
 }
 
 pub type Error {
@@ -125,16 +125,16 @@ pub fn run(
   )
 
   let result = {
-    let data = Session(data: context.data, flash: context.next_flash)
+    let session = Session(data: context.data, flash: context.next_flash)
 
     use <- bool.lazy_guard(context.id == last_context.id, fn() {
-      store.save(Save(id: context.id, data:))
+      store.save(Save(id: context.id, session:))
     })
 
     store.replace(Replace(
       next_id: context.id,
       previous_id: last_context.id,
-      data:,
+      session:,
     ))
   }
 

@@ -26,8 +26,8 @@ pub fn new(
 fn save(
   store: Store(Session),
 ) -> fn(session.Save) -> Result(String, session.Error) {
-  use session.Save(id:, data:) <- function.identity
-  store.save(store, id, data)
+  use session.Save(id:, session:) <- function.identity
+  store.save(store, id, session)
   Ok(id)
 }
 
@@ -44,8 +44,8 @@ fn delete(store: Store(Session)) -> fn(String) -> Nil {
 fn replace(
   store: Store(Session),
 ) -> fn(session.Replace) -> Result(String, session.Error) {
-  use session.Replace(next_id:, previous_id:, data:) <- function.identity
+  use session.Replace(next_id:, previous_id:, session:) <- function.identity
   store.delete(store, previous_id)
-  store.save(store, next_id, data)
+  store.save(store, next_id, session)
   Ok(next_id)
 }
