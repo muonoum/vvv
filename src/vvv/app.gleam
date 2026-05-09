@@ -26,7 +26,7 @@ pub opaque type Model {
 pub type Message
 
 pub fn component() -> lustre.App(Args, Model, Message) {
-  lustre.component(init, update, view, options: [])
+  lustre.component(init:, update:, view:, options: [])
 }
 
 pub fn start(

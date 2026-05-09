@@ -154,9 +154,7 @@ pub fn login_handler(
     ])
 
   let return_path =
-    request.get_query(request)
-    |> result.unwrap([])
-    |> list.key_find("return_path")
+    web.get_query_key(request, "return_path")
     |> result.unwrap("/")
 
   let authorize_uri = Uri(..config.authorize_uri, query: option.Some(query))
@@ -172,9 +170,7 @@ pub fn login_handler(
 
 pub fn logout_handler(request: web.Request) -> session.State(web.Response) {
   let return_path =
-    request.get_query(request)
-    |> result.unwrap([])
-    |> list.key_find("return_path")
+    web.get_query_key(request, "return_path")
     |> result.unwrap("/")
 
   use <- state.do(session.replace())
@@ -264,9 +260,7 @@ fn finalize_decoder(
   config config: Config,
   session session: String,
 ) -> Result(#(Login, Session), Report(Error)) {
-  let query =
-    request.get_query(request)
-    |> result.unwrap([])
+  let query = web.get_query(request)
 
   use login <- result.try({
     json.parse(session, login_decoder())

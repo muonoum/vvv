@@ -71,16 +71,10 @@ pub fn service(
 
 fn set_csrf_token() -> session.State(String) {
   use csrf_token <- state.bind(session.read("csrf-token"))
-
-  case csrf_token {
-    Ok(csrf_token) -> state.return(csrf_token)
-
-    Error(Nil) -> {
-      let csrf_token = extra.random_string(32)
-      use <- state.do(session.insert("csrf-token", csrf_token))
-      state.return(csrf_token)
-    }
-  }
+  use <- result.lazy_unwrap(result.map(csrf_token, state.return))
+  let csrf_token = extra.random_string(32)
+  use <- state.do(session.insert("csrf-token", csrf_token))
+  state.return(csrf_token)
 }
 
 fn verify_csrf_token(
@@ -88,16 +82,9 @@ fn verify_csrf_token(
   next: fn() -> session.State(web.Response),
 ) -> session.State(web.Response) {
   use want <- state.bind(session.read("csrf-token"))
-
-  let have =
-    request.get_query(request)
-    |> result.try(list.key_find(_, "csrf-token"))
-
+  let have = web.get_query_key(request, "csrf-token")
   use <- bool.lazy_guard(have == want, next)
-
-  response.new(403)
-  |> web.text_body("Forbidden")
-  |> state.return
+  state.return(web.text_body(response.new(403), "Forbidden"))
 }
 
 fn get_user() -> session.State(app.User) {

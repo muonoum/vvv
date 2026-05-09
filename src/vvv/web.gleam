@@ -33,6 +33,17 @@ pub type Asset {
   )
 }
 
+pub fn get_query_key(
+  request: request.Request(v),
+  key: String,
+) -> Result(String, Nil) {
+  list.key_find(get_query(request), key)
+}
+
+pub fn get_query(request: request.Request(v)) -> List(#(String, String)) {
+  result.unwrap(request.get_query(request), [])
+}
+
 pub fn log(request: Request, handler: fn() -> Response) -> Response {
   let #(duration, response) = extra.time(handler)
 
