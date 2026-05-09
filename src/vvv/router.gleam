@@ -58,9 +58,7 @@ pub fn service(
       use <- verify_csrf_token(request)
       use user <- state.bind(get_user())
       let status = get_status(request)
-
-      app.start(request, app, user:, status:)
-      |> state.return
+      state.return(app.start(request, app, user:, status:))
     }
 
     _method, _segments ->
