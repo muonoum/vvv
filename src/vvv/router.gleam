@@ -32,12 +32,11 @@ pub fn service(
   use <- web.rescue
   use <- web.log(request)
   use <- static(request)
-
+  use csp_nonce <- content_security_policy()
   let session = session.handler(request, cookie: "vvv", store:, signing_key:)
 
   case request.method, request.path_segments(request) {
     http.Get, [] -> {
-      use csp_nonce <- content_security_policy()
       use <- session
       use csrf_token <- create_csrf_token
       page_handler(title: "vvv", csrf_token:, csp_nonce:)
