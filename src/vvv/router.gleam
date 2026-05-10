@@ -8,7 +8,7 @@ import gleam/option.{type Option}
 import gleam/result
 import gleam/string
 import gleam/uri.{type Uri, Uri}
-import lustre/attribute
+import lustre/attribute.{attribute}
 import lustre/element.{type Element}
 import lustre/element/html
 import lustre/server_component
@@ -20,7 +20,7 @@ import vvv/session
 import vvv/web
 
 pub fn service(
-  app_handler app_handler: fn(web.Request, app.User, Option(String), String) ->
+  app_handler app_handler: fn(web.Request, app.User, Option(String)) ->
     web.Response,
   target_origin target_origin: Uri,
   auth_config auth_config: auth.Config,
@@ -33,45 +33,39 @@ pub fn service(
   use <- web.log(request)
   use <- static(request)
 
-  // TODO: Ny vs. kreve eksisterende
   let session = session.handler(request, cookie: "vvv", store:, signing_key:)
 
   case request.method, request.path_segments(request) {
+    http.Get, [] -> {
+      use csp_nonce <- web.csp_nonce()
+      use <- session
+      use csrf_token <- create_csrf_token
+      page_handler(title: "vvv", csrf_token:, csp_nonce:)
+    }
+
+    http.Get, ["components", "app"] -> {
+      use <- web.verify_origin(request, target_origin)
+      use <- session
+      use <- verify_csrf_token(web.get_query_key(request, "csrf-token"))
+      use user <- state.bind(get_user())
+      let status = get_status(request)
+      state.return(app_handler(request, user, status))
+    }
+
     http.Post, ["auth", "login"] -> {
       use <- web.verify_origin(request, target_origin)
       use form_data <- web.form_data(request, bytes_limit: 4096)
-
       use <- session
-      use session_csrf_token <- state.bind(session.read("csrf-token"))
-      let request_csrf_token = list.key_find(form_data, "csrf-token")
-
-      case session_csrf_token, request_csrf_token {
-        Ok(want), Ok(have) if want == have ->
-          auth.login_handler(request, auth_config)
-
-        _other, _wise ->
-          response.new(403)
-          |> web.text_body("Forbidden")
-          |> state.return
-      }
+      use <- verify_csrf_token(list.key_find(form_data, "csrf-token"))
+      auth.login_handler(request, auth_config)
     }
 
     http.Post, ["auth", "logout"] -> {
       use <- web.verify_origin(request, target_origin)
       use form_data <- web.form_data(request, bytes_limit: 4096)
-
       use <- session
-      use session_csrf_token <- state.bind(session.read("csrf-token"))
-      let request_csrf_token = list.key_find(form_data, "csrf-token")
-
-      case session_csrf_token, request_csrf_token {
-        Ok(want), Ok(have) if want == have -> auth.logout_handler(request)
-
-        _other, _wise ->
-          response.new(403)
-          |> web.text_body("Forbidden")
-          |> state.return
-      }
+      use <- verify_csrf_token(list.key_find(form_data, "csrf-token"))
+      auth.logout_handler(request)
     }
 
     http.Post, ["auth", "callback"] -> auth.callback_handler(request)
@@ -81,44 +75,38 @@ pub fn service(
       auth.finalize_handler(request, auth_config)
     }
 
-    http.Get, [] -> {
-      use csp_nonce <- web.csp_nonce()
-      use <- session
-      use csrf_token <- state.bind(set_csrf_token())
-      page_handler(title: "vvv", csrf_token:, csp_nonce:)
-    }
-
-    http.Get, ["components", "app"] -> {
-      use <- web.verify_origin(request, target_origin)
-
-      use <- session
-      use session_csrf_token <- state.bind(session.read("csrf-token"))
-      let request_csrf_token = web.get_query_key(request, "csrf-token")
-
-      case session_csrf_token, request_csrf_token {
-        Ok(want), Ok(have) if want == have -> {
-          use user <- state.bind(get_user())
-          let status = get_status(request)
-          state.return(app_handler(request, user, status, have))
-        }
-
-        _other, _wise ->
-          response.new(403)
-          |> web.text_body("Forbidden")
-          |> state.return
-      }
-    }
-
     _method, _segments -> web.text_body(response.new(404), "Not Found")
   }
 }
 
-fn set_csrf_token() -> session.State(String) {
-  use csrf_token <- state.bind(session.read("csrf-token"))
-  use <- result.lazy_unwrap(result.map(csrf_token, state.return))
-  let csrf_token = extra.random_string(32)
-  use <- state.do(session.insert("csrf-token", csrf_token))
-  state.return(csrf_token)
+fn create_csrf_token(
+  next: fn(String) -> session.State(web.Response),
+) -> session.State(web.Response) {
+  use session_id <- state.bind(session.id())
+  let csrf_token = extra.hash_string(session_id)
+  next(csrf_token)
+}
+
+fn verify_csrf_token(
+  csrf_token: Result(String, Nil),
+  next: fn() -> session.State(web.Response),
+) -> session.State(web.Response) {
+  use session_id <- state.bind(session.id())
+  let expected_csrf_token = extra.hash_string(session_id)
+
+  case csrf_token {
+    Ok(csrf_token) if csrf_token == expected_csrf_token -> next()
+
+    Ok(_csrf_token) ->
+      response.new(403)
+      |> web.text_body("Bad CSRF token")
+      |> state.return
+
+    Error(Nil) ->
+      response.new(403)
+      |> web.text_body("Missing CSRF token")
+      |> state.return
+  }
 }
 
 fn get_user() -> session.State(app.User) {
@@ -180,7 +168,7 @@ fn page(
       html.head([], [
         html.title([], title),
         html.meta([attribute.charset("utf-8")]),
-        html.meta([attribute.name("csrf-token"), attribute.content(csrf_token)]),
+        // html.meta([attribute.name("csrf-token"), attribute.content(csrf_token)]),
         html.meta([
           attribute.name("viewport"),
           attribute.content("width=device-width,initial-scale=1"),
@@ -197,7 +185,10 @@ fn page(
       ]),
       html.body([], [
         server_component.element(
-          [server_component.route(uri.to_string(app_uri))],
+          [
+            server_component.route(uri.to_string(app_uri)),
+            attribute("csrf-token", csrf_token),
+          ],
           [],
         ),
       ]),

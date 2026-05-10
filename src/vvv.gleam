@@ -65,9 +65,8 @@ pub fn main() -> Nil {
     request: web.Request,
     user: app.User,
     status: Option(String),
-    csrf_token: String,
   ) -> web.Response {
-    app.start(request, app, user:, status:, csrf_token:)
+    app.start(request, app, user:, status:)
   }
 
   let handler =
