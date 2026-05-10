@@ -44,7 +44,7 @@ pub fn get_query(request: request.Request(v)) -> List(#(String, String)) {
   result.unwrap(request.get_query(request), [])
 }
 
-pub fn log(request: Request, handler: fn() -> Response) -> Response {
+pub fn log_request(request: Request, handler: fn() -> Response) -> Response {
   let #(duration, response) = extra.time(handler)
 
   let duration = case duration {
@@ -61,7 +61,7 @@ pub fn log(request: Request, handler: fn() -> Response) -> Response {
   response
 }
 
-pub fn rescue(handler: fn() -> Response) -> Response {
+pub fn rescue_crashes(handler: fn() -> Response) -> Response {
   case exception.rescue(handler) {
     Ok(response) -> response
 
@@ -76,7 +76,7 @@ pub fn rescue(handler: fn() -> Response) -> Response {
 
 pub fn verify_origin(
   request: Request,
-  target_origin: Uri,
+  target: Uri,
   next: fn() -> Response,
 ) -> Response {
   let origin =
@@ -85,11 +85,11 @@ pub fn verify_origin(
     |> result.try(uri.parse)
 
   case origin {
-    Ok(origin)
-      if target_origin.host == origin.host && target_origin.port == origin.port
-    -> next()
+    Ok(origin) if target.host == origin.host && target.port == origin.port ->
+      next()
 
-    _else -> text_body(response.new(400), "Bad Request")
+    Ok(_origin) -> text_body(response.new(400), "Bad origin")
+    Error(Nil) -> text_body(response.new(400), "Missing origin")
   }
 }
 

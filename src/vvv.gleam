@@ -7,7 +7,6 @@ import gleam/function
 import gleam/http
 import gleam/http/request
 import gleam/int
-import gleam/option.{type Option}
 import gleam/otp/factory_supervisor as factory
 import gleam/otp/static_supervisor as supervisor
 import gleam/result
@@ -16,6 +15,7 @@ import logging
 import lustre
 import vvv/app
 import vvv/auth
+import vvv/component
 import vvv/extra
 import vvv/extra/log
 import vvv/router
@@ -61,12 +61,8 @@ pub fn main() -> Nil {
 
   let assert Ok(auth_config) = auth.configure_from_environment()
 
-  let app_handler = fn(
-    request: web.Request,
-    user: app.User,
-    status: Option(String),
-  ) -> web.Response {
-    app.start(request, app, user:, status:)
+  let app_handler = fn(request: web.Request, args: app.Args) -> web.Response {
+    component.start(request, app, args)
   }
 
   let handler =

@@ -1,17 +1,15 @@
 import gleam/option.{type Option}
 import lustre
 import lustre/attribute
-import lustre/component as lustre_component
 import lustre/effect.{type Effect}
 import lustre/element.{type Element}
 import lustre/element/html
 import vvv/auth
 import vvv/component
 import vvv/extra.{classes}
-import vvv/web
 
-pub opaque type Args {
-  Args(user: User, status: Option(String))
+pub type Args {
+  Args(user: User, status: Option(String), csrf_token: String)
 }
 
 pub type User =
@@ -21,71 +19,46 @@ pub type Component =
   component.Name(Args, Message)
 
 pub opaque type Model {
-  Model(user: User, status: Option(String), csrf_token: Option(String))
+  Model(user: User, status: Option(String), csrf_token: String)
 }
 
-pub type Message {
-  CsrfTokenReceived(String)
-}
+pub type Message
 
 pub fn component() -> lustre.App(Args, Model, Message) {
-  lustre.component(init:, update:, view:, options: [
-    lustre_component.on_attribute_change("csrf-token", fn(csrf_token) {
-      Ok(CsrfTokenReceived(csrf_token))
-    }),
-  ])
-}
-
-pub fn start(
-  request: web.Request,
-  app: Component,
-  user user: User,
-  status status: Option(String),
-) -> web.Response {
-  component.start(request, app, Args(user:, status:))
+  lustre.component(init:, update:, view:, options: [])
 }
 
 fn init(args: Args) -> #(Model, Effect(Message)) {
-  let model =
-    Model(user: args.user, status: args.status, csrf_token: option.None)
-
+  let Args(user:, status:, csrf_token:) = args
+  let model = Model(user:, status:, csrf_token:)
   #(model, effect.none())
 }
 
-fn update(model: Model, message: Message) -> #(Model, Effect(Message)) {
-  case message {
-    CsrfTokenReceived(csrf_token) -> #(
-      Model(..model, csrf_token: option.Some(csrf_token)),
-      effect.none(),
-    )
-  }
+fn update(model: Model, _message: Message) -> #(Model, Effect(Message)) {
+  #(model, effect.none())
 }
 
 fn view(model: Model) -> Element(Message) {
-  case model.csrf_token {
-    option.None -> element.none()
-    option.Some(csrf_token) ->
-      html.div([classes(["flex gap-2 p-4"])], case model.user {
-        Ok(option.None) -> [
-          login_link(csrf_token),
-          login_status(model.status),
-        ]
+  html.div([classes(["flex gap-2 p-4"])], case model.user {
+    Ok(option.None) -> [
+      login_link(model.csrf_token),
+      login_status(model.status),
+    ]
 
-        Ok(option.Some(user)) -> [
-          html.div([classes(["flex gap-2"])], [
-            html.div([], [element.text(user.name)]),
-            html.div([], [element.text(user.email)]),
-          ]),
-          logout_link(csrf_token),
-          login_status(model.status),
-        ]
+    Ok(option.Some(user)) -> [
+      html.div([classes(["flex gap-2"])], [
+        html.div([], [element.text(user.name)]),
+        html.div([], [element.text(user.email)]),
+      ]),
+      logout_link(model.csrf_token),
+      login_status(model.status),
+    ]
 
-        Error(message) -> [
-          html.div([], [element.text("error: " <> echo message)]),
-          login_link(csrf_token),
-        ]
-      })
-  }
+    Error(message) -> [
+      html.div([], [element.text("error: " <> echo message)]),
+      login_link(model.csrf_token),
+    ]
+  })
 }
 
 fn login_status(status: Option(String)) -> Element(message) {
