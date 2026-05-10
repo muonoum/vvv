@@ -37,7 +37,7 @@ pub fn service(
 
   case request.method, request.path_segments(request) {
     http.Get, [] -> {
-      use csp_nonce <- web.csp_nonce()
+      use csp_nonce <- content_security_policy()
       use <- session
       use csrf_token <- create_csrf_token
       page_handler(title: "vvv", csrf_token:, csp_nonce:)
@@ -77,6 +77,18 @@ pub fn service(
 
     _method, _segments -> web.text_body(response.new(404), "Not Found")
   }
+}
+
+fn content_security_policy(next: fn(String) -> web.Response) -> web.Response {
+  let nonce = extra.random_string(24)
+
+  let header =
+    "script-src 'nonce-"
+    <> nonce
+    <> "' 'strict-dynamic'; object-src 'none'; base-uri 'none'"
+
+  next(nonce)
+  |> response.set_header("content-security-policy", header)
 }
 
 fn create_csrf_token(
@@ -168,7 +180,6 @@ fn page(
       html.head([], [
         html.title([], title),
         html.meta([attribute.charset("utf-8")]),
-        // html.meta([attribute.name("csrf-token"), attribute.content(csrf_token)]),
         html.meta([
           attribute.name("viewport"),
           attribute.content("width=device-width,initial-scale=1"),
