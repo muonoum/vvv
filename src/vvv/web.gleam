@@ -37,14 +37,19 @@ pub fn get_query_key(
   request: request.Request(v),
   key: String,
 ) -> Result(String, Nil) {
-  list.key_find(get_query(request), key)
+  get_query(request)
+  |> list.key_find(key)
 }
 
 pub fn get_query(request: request.Request(v)) -> List(#(String, String)) {
-  result.unwrap(request.get_query(request), [])
+  request.get_query(request)
+  |> result.unwrap([])
 }
 
-pub fn log_request(request: Request, handler: fn() -> Response) -> Response {
+pub fn log_request(
+  request: request.Request(a),
+  handler: fn() -> response.Response(b),
+) -> response.Response(b) {
   let #(duration, response) = extra.time(handler)
 
   let duration = case duration {
@@ -69,14 +74,14 @@ pub fn rescue_crashes(handler: fn() -> Response) -> Response {
       log.error("Rescued", [log.inspect("error", error)])
 
       response.new(500)
-      |> response.set_body(ewe.TextData("Internal Server Error"))
+      |> text_body("Internal Server Error")
     }
   }
 }
 
 pub fn verify_origin(
-  request: Request,
-  target: Uri,
+  request: request.Request(v),
+  target_origin: Uri,
   next: fn() -> Response,
 ) -> Response {
   let origin =
@@ -85,12 +90,18 @@ pub fn verify_origin(
     |> result.try(uri.parse)
 
   case origin {
-    Ok(origin) if target.host == origin.host && target.port == origin.port ->
-      next()
+    Ok(origin)
+      if target_origin.host == origin.host && target_origin.port == origin.port
+    -> next()
 
     Ok(_origin) -> text_body(response.new(400), "Bad origin")
     Error(Nil) -> text_body(response.new(400), "Missing origin")
   }
+}
+
+fn bits_body(response: response.Response(v), bits: BitArray) -> Response {
+  response
+  |> response.set_body(ewe.BitsData(bits))
 }
 
 pub fn text_body(response: response.Response(v), text: String) -> Response {
@@ -180,10 +191,10 @@ fn read_asset(path: String) -> Result(#(String, String), Nil) {
 
 pub fn serve_assets(
   assets: Dict(List(String), Asset),
-  request request: Request,
+  request request: request.Request(v),
   segments segments: List(String),
-  next next: fn() -> response.Response(ewe.ResponseBody),
-) -> response.Response(ewe.ResponseBody) {
+  next next: fn() -> Response,
+) -> Response {
   case dict.get(assets, segments) {
     Error(Nil) -> next()
 
@@ -192,7 +203,7 @@ pub fn serve_assets(
         Ok(header) if asset.hash == header ->
           response.new(304)
           |> response.prepend_header("etag", asset.hash)
-          |> response.set_body(ewe.Empty)
+          |> empty_body
 
         Ok(_header) | Error(Nil) -> {
           case simplifile.read_bits(asset.full_path) {
@@ -200,14 +211,14 @@ pub fn serve_assets(
               log.error("", [log.inspect("error", error)])
 
               response.new(500)
-              |> response.set_body(ewe.TextData("Internal Server Error"))
+              |> text_body("Internal Server Error")
             }
 
             Ok(bits) ->
               response.new(200)
               |> response.prepend_header("content-type", asset.content_type)
               |> response.prepend_header("etag", asset.hash)
-              |> response.set_body(ewe.BitsData(bits))
+              |> bits_body(bits)
           }
         }
       }

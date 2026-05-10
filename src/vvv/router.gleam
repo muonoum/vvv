@@ -87,8 +87,8 @@ fn content_security_policy(next: fn(String) -> web.Response) -> web.Response {
   let policy = [
     "script-src 'self', script-src 'nonce-" <> nonce <> "'",
     "style-src 'self', style-src 'nonce-" <> nonce <> "'",
-    "object-src 'none'",
     "base-uri 'none'",
+    "object-src 'none'",
   ]
 
   let header = string.join(policy, "; ")
