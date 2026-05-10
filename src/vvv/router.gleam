@@ -31,8 +31,8 @@ pub fn service(
   use request <- function.identity
   use <- web.rescue
   use <- web.log(request)
-  use <- static(request)
   use csp_nonce <- content_security_policy()
+  use <- static(request)
   let session = session.handler(request, cookie: "vvv", store:, signing_key:)
 
   case request.method, request.path_segments(request) {
