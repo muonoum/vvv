@@ -7,6 +7,7 @@ import gleam/function
 import gleam/http
 import gleam/http/request
 import gleam/int
+import gleam/option.{type Option}
 import gleam/otp/factory_supervisor as factory
 import gleam/otp/static_supervisor as supervisor
 import gleam/result
@@ -60,9 +61,18 @@ pub fn main() -> Nil {
 
   let assert Ok(auth_config) = auth.configure_from_environment()
 
+  let app_handler = fn(
+    request: web.Request,
+    user: app.User,
+    status: Option(String),
+    csrf_token: String,
+  ) -> web.Response {
+    app.start(request, app, user:, status:, csrf_token:)
+  }
+
   let handler =
     router.service(
-      app:,
+      app_handler:,
       target_origin:,
       auth_config:,
       session_store:,

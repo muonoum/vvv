@@ -98,39 +98,6 @@ fn try_key(
   |> result.replace_error(key)
 }
 
-pub fn router(
-  request: web.Request,
-  target_origin target_origin: Uri,
-  config config: Config,
-  session session: session.Handler,
-  segments segments: List(String),
-) -> web.Response {
-  case request.method, segments {
-    http.Get, ["login"] -> {
-      use <- web.verify_origin(request, target_origin)
-      use <- session
-      login_handler(request, config)
-    }
-
-    http.Get, ["logout"] -> {
-      use <- web.verify_origin(request, target_origin)
-      use <- session
-      logout_handler(request)
-    }
-
-    http.Post, ["callback"] -> callback_handler(request)
-
-    http.Get, ["finalize"] -> {
-      use <- session
-      finalize_handler(request, config)
-    }
-
-    _method, _segments ->
-      response.new(404)
-      |> web.text_body("Not Found")
-  }
-}
-
 pub fn login_handler(
   request: web.Request,
   config: Config,

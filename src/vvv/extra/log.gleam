@@ -67,16 +67,12 @@ fn format(fields: List(Field), result: List(String)) -> String {
   case fields {
     [] -> string.join(list.reverse(result), " ")
 
-    [Field(key: "", value:), ..rest] ->
-      format(rest, [format_value(value), ..result])
-
-    [Field(key:, value:), ..rest] ->
-      format(rest, [key_value(key, format_value(value)), ..result])
+    [field, ..rest] ->
+      format(rest, case field.key {
+        "" -> [format_value(field.value), ..result]
+        key -> [key <> "=" <> format_value(field.value), ..result]
+      })
   }
-}
-
-fn key_value(key: String, value: String) -> String {
-  key <> "=" <> value
 }
 
 fn format_value(value: Value) -> String {
