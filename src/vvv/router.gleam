@@ -82,14 +82,18 @@ pub fn service(
 }
 
 fn content_security_policy(next: fn(String) -> web.Response) -> web.Response {
-  let script_nonce = extra.random_string(24)
+  let nonce = extra.random_string(24)
 
-  let header =
-    "script-src 'nonce-"
-    <> script_nonce
-    <> "' 'strict-dynamic'; object-src 'none'; base-uri 'none'"
+  let policy = [
+    "script-src 'self', script-src 'nonce-" <> nonce <> "'",
+    "style-src 'self', style-src 'nonce-" <> nonce <> "'",
+    "object-src 'none'",
+    "base-uri 'none'",
+  ]
 
-  next(script_nonce)
+  let header = string.join(policy, "; ")
+
+  next(nonce)
   |> response.set_header("content-security-policy", header)
 }
 
@@ -187,7 +191,11 @@ fn page(
           attribute.name("viewport"),
           attribute.content("width=device-width,initial-scale=1"),
         ]),
-        html.link([attribute.rel("stylesheet"), attribute.href("/app.css")]),
+        html.link([
+          attribute.rel("stylesheet"),
+          attribute.href("/app.css"),
+          attribute.nonce(csp_nonce),
+        ]),
         html.script(
           [
             attribute.type_("module"),

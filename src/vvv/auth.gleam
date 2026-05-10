@@ -148,7 +148,7 @@ pub fn logout_handler(request: web.Request) -> session.State(web.Response) {
   |> state.return
 }
 
-pub fn callback_handler(request) -> web.Response {
+pub fn callback_handler(request: web.Request) -> web.Response {
   use form_data <- web.form_data(request, bytes_limit: 4096)
 
   case list.key_find(form_data, "state") {
