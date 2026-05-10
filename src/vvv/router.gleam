@@ -79,14 +79,14 @@ pub fn service(
 }
 
 fn content_security_policy(next: fn(String) -> web.Response) -> web.Response {
-  let nonce = extra.random_string(24)
+  let script_nonce = extra.random_string(24)
 
   let header =
     "script-src 'nonce-"
-    <> nonce
+    <> script_nonce
     <> "' 'strict-dynamic'; object-src 'none'; base-uri 'none'"
 
-  next(nonce)
+  next(script_nonce)
   |> response.set_header("content-security-policy", header)
 }
 
