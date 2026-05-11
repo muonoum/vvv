@@ -32,7 +32,7 @@ pub fn service(
   use <- web.log_request(request)
   use <- static(request)
 
-  let session = session.start(request, cookie_name: "vvv", store:, signing_key:)
+  let session = session.start(request, store:, cookie_name: "vvv", signing_key:)
 
   case request.method, request.path_segments(request) {
     http.Get, [] -> {
