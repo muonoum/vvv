@@ -1,4 +1,5 @@
 import gleam/bit_array
+import gleam/bool
 import gleam/crypto
 import gleam/dict.{type Dict}
 import gleam/http
@@ -118,26 +119,23 @@ fn run_session(
     Session(id: context2.id, data: context2.data, flash: context2.next_flash)
 
   let id_changed = context1.id != context2.id
-  let data_changed = context1.data != context2.data
-  let flash_changed = context1.next_flash != context2.flash
 
-  case id_changed, data_changed, flash_changed {
-    True, _data, _flash -> {
-      // TODO
-      let assert Ok(value) = store.replace(context1.id, session)
-      log.debug("Replace session", [])
-      set_cookie(response, value)
-    }
+  use <- bool.lazy_guard(id_changed, fn() {
+    let assert Ok(value) = store.replace(context1.id, session)
+    log.debug("Replace session", [])
+    set_cookie(response, value)
+  })
 
-    _id, True, _flash | _id, _data, True -> {
-      // TODO
-      let assert Ok(value) = store.save(session)
-      log.debug("Save session", [])
-      set_cookie(response, value)
-    }
+  let data_changed =
+    context1.data != context2.data || context1.next_flash != context2.flash
 
-    _id, _data, _flash -> default(response)
-  }
+  use <- bool.lazy_guard(data_changed, fn() {
+    let assert Ok(value) = store.save(session)
+    log.debug("Save session", [])
+    set_cookie(response, value)
+  })
+
+  default(response)
 }
 
 pub fn id() -> State(String) {
