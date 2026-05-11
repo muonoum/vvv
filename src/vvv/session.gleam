@@ -126,10 +126,10 @@ fn run_session(
     set_cookie(response, value)
   })
 
-  let data_changed =
+  let content_changed =
     context1.data != context2.data || context1.next_flash != context2.flash
 
-  use <- bool.lazy_guard(data_changed, fn() {
+  use <- bool.lazy_guard(content_changed, fn() {
     let assert Ok(value) = store.save(session)
     log.debug("Save session", [])
     set_cookie(response, value)
