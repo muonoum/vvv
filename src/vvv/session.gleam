@@ -2,6 +2,7 @@ import gleam/bit_array
 import gleam/bool
 import gleam/crypto
 import gleam/dict.{type Dict}
+import gleam/function
 import gleam/http
 import gleam/http/cookie
 import gleam/http/request
@@ -40,9 +41,6 @@ pub type Context {
   )
 }
 
-pub type Handler =
-  fn(fn() -> State(web.Response)) -> web.Response
-
 pub fn empty_session(id: String) -> Session {
   Session(id:, data: dict.new(), flash: dict.new())
 }
@@ -51,22 +49,14 @@ fn empty_context(id: String) -> Context {
   Context(id:, data: dict.new(), flash: dict.new(), next_flash: dict.new())
 }
 
-pub fn handler(
+pub fn start(
   request: web.Request,
   cookie_name cookie_name: String,
   store store: Store,
   signing_key signing_key: String,
-) -> Handler {
-  run(request, store:, cookie_name:, signing_key:, handler: _)
-}
+) -> fn(fn() -> State(web.Response)) -> web.Response {
+  use handler <- function.identity
 
-pub fn run(
-  request: request.Request(v),
-  store store: Store,
-  cookie_name cookie_name: String,
-  signing_key signing_key: String,
-  handler handler: fn() -> State(web.Response),
-) -> web.Response {
   let cookie_value =
     request.get_cookies(request)
     |> list.key_find(cookie_name)
