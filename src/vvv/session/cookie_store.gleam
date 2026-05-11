@@ -1,36 +1,53 @@
-import gleam/json
+import gleam/dynamic/decode.{type Decoder}
+import gleam/function
+import gleam/json.{type Json}
 import gleam/otp/static_supervisor as supervisor
 import gleam/result
 import vvv/extra/log
-import vvv/session.{type Session}
+import vvv/session.{type Session, Session}
 
 pub fn new(
   supervisor: supervisor.Builder,
 ) -> #(session.Store, supervisor.Builder, fn() -> Result(Nil, String)) {
-  #(session.store(save:, load:, delete:, replace:), supervisor, fn() { Ok(Nil) })
+  let store = session.Store(initialise:, save:, load:, replace:)
+  #(store, supervisor, fn() { Ok(Nil) })
 }
 
-fn save(save: session.Save) -> Result(String, Nil) {
-  let session.Save(session:, ..) = save
-  Ok(session.to_json(session))
+fn initialise(id: String) -> String {
+  session.empty_session(id)
+  |> encode_session
+  |> json.to_string
 }
 
-fn load(value: String) -> Session {
-  use <- result.lazy_unwrap(parse_value(value))
-  session.empty_session()
+fn save(session: Session) -> Result(String, Nil) {
+  encode_session(session)
+  |> json.to_string
+  |> Ok
 }
 
-fn parse_value(value: String) -> Result(Session, Nil) {
-  use error <- result.try_recover(json.parse(value, session.session_decoder()))
-  log.warning("Parse session", [log.inspect("error", error)])
+fn load(value: String) -> Result(Session, Nil) {
+  use error <- result.try_recover(json.parse(value, session_decoder()))
+  log.warning("Failed to load session", [log.inspect("error", error)])
   Error(Nil)
 }
 
-fn delete(_id: String) -> Nil {
-  Nil
+fn replace(_previous_id: String, session: Session) -> Result(String, Nil) {
+  encode_session(session)
+  |> json.to_string
+  |> Ok
 }
 
-fn replace(replace: session.Replace) -> Result(String, Nil) {
-  let session.Replace(session:, ..) = replace
-  Ok(session.to_json(session))
+pub fn session_decoder() -> Decoder(Session) {
+  use id <- decode.field("id", decode.string)
+  use data <- decode.field("data", decode.dict(decode.string, decode.string))
+  use flash <- decode.field("flash", decode.dict(decode.string, decode.string))
+  decode.success(Session(id:, data:, flash:))
+}
+
+fn encode_session(session: Session) -> Json {
+  json.object([
+    #("id", json.string(session.id)),
+    #("data", json.dict(session.data, function.identity, json.string)),
+    #("flash", json.dict(session.flash, function.identity, json.string)),
+  ])
 }

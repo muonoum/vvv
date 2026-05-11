@@ -1,47 +1,36 @@
 import gleam/bit_array
-import gleam/bool
 import gleam/crypto
 import gleam/dict.{type Dict}
-import gleam/dynamic/decode.{type Decoder}
-import gleam/function
 import gleam/http
 import gleam/http/cookie
 import gleam/http/request
 import gleam/http/response
-import gleam/json.{type Json}
 import gleam/list
 import gleam/option
 import gleam/result
 import vvv/extra
 import vvv/extra/log
 import vvv/extra/state
+import vvv/store
 import vvv/web
 
-pub opaque type Store {
+pub type Store {
   Store(
-    save: fn(Save) -> Result(String, Nil),
-    load: fn(String) -> Session,
-    delete: fn(String) -> Nil,
-    replace: fn(Replace) -> Result(String, Nil),
+    initialise: fn(String) -> String,
+    load: fn(String) -> Result(Session, Nil),
+    save: fn(Session) -> Result(String, Nil),
+    replace: fn(String, Session) -> Result(String, Nil),
   )
 }
 
-pub type Save {
-  Save(id: String, session: Session)
-}
-
-pub type Replace {
-  Replace(next_id: String, previous_id: String, session: Session)
-}
-
-pub opaque type Session {
-  Session(data: Dict(String, String), flash: Dict(String, String))
+pub type Session {
+  Session(id: String, data: Dict(String, String), flash: Dict(String, String))
 }
 
 pub type State(v) =
   state.State(v, Context)
 
-pub opaque type Context {
+pub type Context {
   Context(
     id: String,
     data: Dict(String, String),
@@ -53,146 +42,102 @@ pub opaque type Context {
 pub type Handler =
   fn(fn() -> State(web.Response)) -> web.Response
 
-pub fn store(
-  save save: fn(Save) -> Result(String, Nil),
-  load load: fn(String) -> Session,
-  delete delete: fn(String) -> Nil,
-  replace replace: fn(Replace) -> Result(String, Nil),
-) -> Store {
-  Store(load:, delete:, save:, replace:)
+pub fn empty_session(id: String) -> Session {
+  Session(id:, data: dict.new(), flash: dict.new())
 }
 
-pub fn empty_session() -> Session {
-  Session(data: dict.new(), flash: dict.new())
-}
-
-fn make_session_id() -> String {
-  extra.random_string(32)
-}
-
-fn empty_context() -> Context {
-  Context(
-    id: make_session_id(),
-    data: dict.new(),
-    flash: dict.new(),
-    next_flash: dict.new(),
-  )
+fn empty_context(id: String) -> Context {
+  Context(id:, data: dict.new(), flash: dict.new(), next_flash: dict.new())
 }
 
 pub fn handler(
   request: web.Request,
-  cookie cookie: String,
+  cookie_name cookie_name: String,
   store store: Store,
   signing_key signing_key: String,
 ) -> Handler {
-  run(request, store:, cookie:, signing_key:, handler: _)
+  run(request, store:, cookie_name:, signing_key:, handler: _)
 }
 
 pub fn run(
-  request: web.Request,
+  request: request.Request(v),
   store store: Store,
-  cookie cookie: String,
+  cookie_name cookie_name: String,
   signing_key signing_key: String,
   handler handler: fn() -> State(web.Response),
 ) -> web.Response {
   let cookie_value =
     request.get_cookies(request)
-    |> list.key_find(cookie)
+    |> list.key_find(cookie_name)
     |> result.try(crypto.verify_signed_message(_, <<signing_key:utf8>>))
     |> result.try(bit_array.to_string)
 
-  let last_context = case cookie_value {
-    Error(Nil) -> empty_context()
-
-    Ok(id) -> {
-      let Session(data:, flash:) = store.load(id)
-      Context(..empty_context(), id:, data:, flash:)
-    }
+  let set_cookie = fn(response, value) {
+    response.set_cookie(
+      response,
+      cookie_name,
+      crypto.sign_message(<<value:utf8>>, <<signing_key:utf8>>, crypto.Sha256),
+      cookie.Attributes(..cookie.defaults(http.Https), max_age: option.None),
+    )
   }
 
-  let #(response, context) = state.run(handler(), last_context)
-
-  use <- bool.guard(
-    context.id == last_context.id
-      && context.data == last_context.data
-      && context.next_flash == last_context.flash,
-    response,
-  )
-
-  let result = {
-    let session = Session(data: context.data, flash: context.next_flash)
-
-    use <- bool.lazy_guard(context.id == last_context.id, fn() {
-      store.save(Save(id: context.id, session:))
-    })
-
-    store.replace(Replace(
-      next_id: context.id,
-      previous_id: last_context.id,
-      session:,
-    ))
-  }
-
-  case result {
-    Error(error) -> {
-      log.error("Save session", [log.inspect("error", error)])
-
-      response.new(500)
-      |> web.text_body("Internal Server Error")
-      |> delete_cookie(cookie)
+  case cookie_value {
+    Error(Nil) -> {
+      let context = empty_context(extra.random_string(32))
+      use response <- run_session(store:, context:, set_cookie:, handler:)
+      let value = store.initialise(context.id)
+      log.debug("Initialise session", [])
+      set_cookie(response, value)
     }
 
     Ok(value) -> {
-      log.debug("Save session", [])
-      set_cookie(response, name: cookie, value:, signing_key:)
+      let Session(id:, data:, flash:) = {
+        log.debug("Load session", [])
+        use <- result.lazy_unwrap(store.load(value))
+        log.warning("Fallback to empty session", [])
+        empty_session(value)
+      }
+
+      let context = Context(..empty_context(id), data:, flash:)
+      use response <- run_session(store:, context:, set_cookie:, handler:)
+      response
     }
   }
 }
 
-fn set_cookie(
-  response: response.Response(_),
-  name name: String,
-  value value: String,
-  signing_key signing_key: String,
-) -> response.Response(a) {
-  let value =
-    crypto.sign_message(<<value:utf8>>, <<signing_key:utf8>>, crypto.Sha256)
+fn run_session(
+  store store: Store,
+  context context1: Context,
+  set_cookie set_cookie,
+  handler handler: fn() -> State(web.Response),
+  default default: fn(web.Response) -> web.Response,
+) -> web.Response {
+  let #(response, context2) = state.run(handler(), context1)
 
-  let attributes = cookie.defaults(http.Https)
-  let attributes = cookie.Attributes(..attributes, max_age: option.None)
-  response.set_cookie(response, name, value, attributes)
-}
+  let session =
+    Session(id: context2.id, data: context2.data, flash: context2.next_flash)
 
-fn delete_cookie(
-  response: response.Response(_),
-  name name: String,
-) -> response.Response(a) {
-  let attributes = cookie.defaults(http.Https)
-  let attributes = cookie.Attributes(..attributes, max_age: option.Some(0))
-  response.set_cookie(response, name, "", attributes)
-}
+  let id_changed = context1.id != context2.id
+  let data_changed = context1.data != context2.data
+  let flash_changed = context1.next_flash != context2.flash
 
-pub fn to_json(session: Session) -> String {
-  json.to_string(
-    json.object([
-      #("data", encode_dict(session.data)),
-      #("flash", encode_dict(session.flash)),
-    ]),
-  )
-}
+  case id_changed, data_changed, flash_changed {
+    True, _data, _flash -> {
+      // TODO
+      let assert Ok(value) = store.replace(context1.id, session)
+      log.debug("Replace session", [])
+      set_cookie(response, value)
+    }
 
-fn encode_dict(dict: Dict(String, String)) -> Json {
-  json.dict(dict, function.identity, json.string)
-}
+    _id, True, _flash | _id, _data, True -> {
+      // TODO
+      let assert Ok(value) = store.save(session)
+      log.debug("Save session", [])
+      set_cookie(response, value)
+    }
 
-pub fn session_decoder() -> Decoder(Session) {
-  use data <- decode.field("data", dict_decoder())
-  use flash <- decode.field("flash", dict_decoder())
-  decode.success(Session(data:, flash:))
-}
-
-fn dict_decoder() -> Decoder(Dict(String, String)) {
-  decode.dict(decode.string, decode.string)
+    _id, _data, _flash -> default(response)
+  }
 }
 
 pub fn id() -> State(String) {
@@ -202,7 +147,7 @@ pub fn id() -> State(String) {
 
 pub fn replace() -> State(Nil) {
   use ctx: Context <- state.update
-  Context(..ctx, id: make_session_id())
+  Context(..ctx, id: extra.random_string(32))
 }
 
 pub fn insert(key: String, value: String) -> State(Nil) {
