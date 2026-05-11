@@ -1,7 +1,6 @@
 import gleam/erlang/process
 import gleam/function
 import gleam/otp/static_supervisor as supervisor
-import gleam/result
 import vvv/session.{type Session}
 import vvv/store.{type Store}
 
@@ -35,8 +34,7 @@ fn save(store: Store(Session)) -> fn(Session) -> Result(String, Nil) {
 
 fn load(store: Store(Session)) -> fn(String) -> Result(Session, Nil) {
   use id: String <- function.identity
-  use Nil <- result.try_recover(store.load(store, id))
-  Ok(session.empty_session(id))
+  store.load(store, id)
 }
 
 fn replace(
