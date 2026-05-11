@@ -111,7 +111,7 @@ fn run_session(
   context context1: Context,
   set_cookie set_cookie,
   handler handler: fn() -> State(web.Response),
-  default default: fn(web.Response) -> web.Response,
+  initialise initialise: fn(web.Response) -> web.Response,
 ) -> web.Response {
   let #(response, context2) = state.run(handler(), context1)
 
@@ -135,7 +135,7 @@ fn run_session(
     set_cookie(response, value)
   })
 
-  default(response)
+  initialise(response)
 }
 
 pub fn id() -> State(String) {
