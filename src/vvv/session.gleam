@@ -41,6 +41,9 @@ pub type Context {
   )
 }
 
+pub type Handler =
+  fn(fn() -> State(web.Response)) -> web.Response
+
 pub fn empty_session(id: String) -> Session {
   Session(id:, data: dict.new(), flash: dict.new())
 }
@@ -54,7 +57,7 @@ pub fn start(
   cookie_name cookie_name: String,
   store store: Store,
   signing_key signing_key: String,
-) -> fn(fn() -> State(web.Response)) -> web.Response {
+) -> Handler {
   use handler <- function.identity
 
   let cookie_value =

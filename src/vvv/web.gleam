@@ -33,19 +33,6 @@ pub type Asset {
   )
 }
 
-pub fn get_query_key(
-  request: request.Request(v),
-  key: String,
-) -> Result(String, Nil) {
-  get_query(request)
-  |> list.key_find(key)
-}
-
-pub fn get_query(request: request.Request(v)) -> List(#(String, String)) {
-  request.get_query(request)
-  |> result.unwrap([])
-}
-
 pub fn log_request(
   request: request.Request(a),
   handler: fn() -> response.Response(b),

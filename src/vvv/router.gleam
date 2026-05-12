@@ -46,9 +46,10 @@ pub fn service(
       use <- web.verify_origin(request, target_origin)
       use <- session
 
-      use csrf_token <- verify_csrf_token({
-        web.get_query_key(request, "csrf-token")
-      })
+      use csrf_token <- verify_csrf_token(
+        request.get_query(request)
+        |> result.try(list.key_find(_, "csrf-token")),
+      )
 
       use user <- state.bind(get_user())
       let status = get_status(request)
@@ -59,7 +60,7 @@ pub fn service(
       use <- web.verify_origin(request, target_origin)
       use form_data <- web.form_data(request, bytes_limit: 4096)
       use <- session
-      use _ <- verify_csrf_token(list.key_find(form_data, "csrf-token"))
+      use _token <- verify_csrf_token(list.key_find(form_data, "csrf-token"))
       auth.login_handler(request, auth_config)
     }
 
@@ -67,7 +68,7 @@ pub fn service(
       use <- web.verify_origin(request, target_origin)
       use form_data <- web.form_data(request, bytes_limit: 4096)
       use <- session
-      use _ <- verify_csrf_token(list.key_find(form_data, "csrf-token"))
+      use _token <- verify_csrf_token(list.key_find(form_data, "csrf-token"))
       auth.logout_handler(request)
     }
 
@@ -110,21 +111,25 @@ fn verify_csrf_token(
   csrf_token: Result(String, Nil),
   next: fn(String) -> session.State(web.Response),
 ) -> session.State(web.Response) {
-  use session_id <- state.bind(session.id())
-  let expected_csrf_token = extra.hash_string(session_id)
-
   case csrf_token {
-    Ok(csrf_token) if csrf_token == expected_csrf_token -> next(csrf_token)
-
-    Ok(_csrf_token) ->
-      response.new(403)
-      |> web.text_body("Bad CSRF token")
-      |> state.return
-
     Error(Nil) ->
       response.new(403)
       |> web.text_body("Missing CSRF token")
       |> state.return
+
+    Ok(csrf_token) -> {
+      use session_id <- state.bind(session.id())
+      let expected_csrf_token = extra.hash_string(session_id)
+
+      case csrf_token == expected_csrf_token {
+        True -> next(csrf_token)
+
+        False ->
+          response.new(403)
+          |> web.text_body("Bad CSRF token")
+          |> state.return
+      }
+    }
   }
 }
 
