@@ -82,11 +82,11 @@ pub fn main() -> Nil {
     |> ewe.supervised
 
   let assert Ok(_) =
-    supervisor.start({
+    supervisor.start(
       supervisor
       |> supervisor.add(app_spec)
-      |> supervisor.add(server_spec)
-    })
+      |> supervisor.add(server_spec),
+    )
 
   case initialise_session_store() {
     Error(error) -> panic as error
