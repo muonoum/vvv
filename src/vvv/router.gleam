@@ -42,7 +42,7 @@ pub fn service(
     http.Get, ["components", "app"] -> {
       use <- web.verify_origin(request, target_origin)
       use query <- parse_query(request)
-      use csrf_token <- get_key(query, "csrf-token")
+      use csrf_token <- require_key(query, "csrf-token")
       use <- session
       use <- verify_csrf_token(csrf_token)
       use user <- state.bind(get_user())
@@ -59,7 +59,7 @@ pub fn service(
     http.Post, ["auth", "login"] -> {
       use <- web.verify_origin(request, target_origin)
       use form <- web.form_data(request, bytes_limit: 1024)
-      use csrf_token <- get_key(form, "csrf-token")
+      use csrf_token <- require_key(form, "csrf-token")
       use <- session
       use <- verify_csrf_token(csrf_token)
       auth.login_handler(request, auth_config)
@@ -68,7 +68,7 @@ pub fn service(
     http.Post, ["auth", "logout"] -> {
       use <- web.verify_origin(request, target_origin)
       use form <- web.form_data(request, bytes_limit: 1024)
-      use csrf_token <- get_key(form, "csrf-token")
+      use csrf_token <- require_key(form, "csrf-token")
       use <- session
       use <- verify_csrf_token(csrf_token)
       auth.logout_handler(request)
@@ -111,7 +111,7 @@ fn parse_query(
   }
 }
 
-fn get_key(
+fn require_key(
   pairs: List(#(String, String)),
   key: String,
   next: fn(String) -> web.Response,
@@ -131,10 +131,10 @@ fn create_csrf_token(
 
 fn verify_csrf_token(
   csrf_token: String,
-  continue: fn() -> session.State(web.Response),
+  next: fn() -> session.State(web.Response),
 ) -> session.State(web.Response) {
   use expected <- create_csrf_token
-  use <- bool.lazy_guard(csrf_token == expected, continue)
+  use <- bool.lazy_guard(csrf_token == expected, next)
   state.return(web.text_body(response.new(403), "Bad CSRF token"))
 }
 
