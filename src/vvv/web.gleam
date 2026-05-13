@@ -59,9 +59,7 @@ pub fn rescue_crashes(handler: fn() -> Response) -> Response {
 
     Error(error) -> {
       log.error("Rescued", [log.inspect("error", error)])
-
-      response.new(500)
-      |> text_body("Internal Server Error")
+      text_body(response.new(500), "Internal Server Error")
     }
   }
 }
@@ -71,12 +69,12 @@ pub fn verify_origin(
   target_origin: Uri,
   next: fn() -> Response,
 ) -> Response {
-  let origin =
-    request.get_header(request, "origin")
-    |> result.lazy_or(fn() { request.get_header(request, "referer") })
-    |> result.try(uri.parse)
+  let origin = case request.get_header(request, "origin") {
+    Error(Nil) -> request.get_header(request, "referer")
+    Ok(origin) -> Ok(origin)
+  }
 
-  case origin {
+  case result.try(origin, uri.parse) {
     Ok(origin)
       if target_origin.host == origin.host && target_origin.port == origin.port
     -> next()
@@ -87,19 +85,16 @@ pub fn verify_origin(
 }
 
 fn bits_body(response: response.Response(v), bits: BitArray) -> Response {
-  response
-  |> response.set_body(ewe.BitsData(bits))
+  response.set_body(response, ewe.BitsData(bits))
 }
 
 pub fn text_body(response: response.Response(v), text: String) -> Response {
-  response
-  |> response.set_header("content-type", "text/plain")
+  response.set_header(response, "content-type", "text/plain")
   |> response.set_body(ewe.TextData(text))
 }
 
 pub fn html_body(response: response.Response(v), html: StringTree) -> Response {
-  response
-  |> response.set_header("content-type", "text/html; charset=utf-8")
+  response.set_header(response, "content-type", "text/html; charset=utf-8")
   |> response.set_body(ewe.StringTreeData(html))
 }
 
@@ -115,11 +110,8 @@ pub fn form_data(
   use body <- string_data(request, bytes_limit:)
 
   case uri.parse_query(body) {
+    Error(Nil) -> text_body(response.new(400), "Bad Request")
     Ok(pairs) -> next(pairs)
-
-    Error(Nil) ->
-      response.new(400)
-      |> text_body("Bad Request")
   }
 }
 
@@ -129,17 +121,12 @@ pub fn string_data(
   next next: fn(String) -> Response,
 ) -> Response {
   case ewe.read_body(request, bytes_limit:) {
-    Error(..) ->
-      response.new(400)
-      |> text_body("Bad Request")
+    Error(_) -> text_body(response.new(400), "Bad Request")
 
     Ok(request) ->
       case bit_array.to_string(request.body) {
+        Error(Nil) -> text_body(response.new(400), "Bad Request")
         Ok(body) -> next(body)
-
-        Error(..) ->
-          response.new(400)
-          |> text_body("Bad Request")
       }
   }
 }
@@ -156,13 +143,11 @@ pub fn load_assets(base: String) -> Dict(List(String), Asset) {
 }
 
 fn read_asset(path: String) -> Result(#(String, String), Nil) {
-  use bits <- result.try(
-    simplifile.read_bits(path)
-    |> result.try_recover(fn(error) {
-      log.warning("Read asset", [log.inspect("error", error)])
-      Error(Nil)
-    }),
-  )
+  use bits <- result.try({
+    use error <- result.try_recover(simplifile.read_bits(path))
+    log.warning("Read asset", [log.inspect("error", error)])
+    Error(Nil)
+  })
 
   let content_type =
     filepath.extension(path)
@@ -196,9 +181,7 @@ pub fn serve_assets(
           case simplifile.read_bits(asset.full_path) {
             Error(error) -> {
               log.error("", [log.inspect("error", error)])
-
-              response.new(500)
-              |> text_body("Internal Server Error")
+              text_body(response.new(500), "Internal Server Error")
             }
 
             Ok(bits) ->

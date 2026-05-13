@@ -1,4 +1,4 @@
-pub type State(v, ctx) {
+pub opaque type State(v, ctx) {
   State(run: fn(ctx) -> #(v, ctx))
 }
 
@@ -33,15 +33,4 @@ pub fn get() -> State(ctx, ctx) {
 pub fn put(ctx: ctx) -> State(Nil, ctx) {
   use _ctx <- State
   #(Nil, ctx)
-}
-
-pub fn map(state: State(a, ctx), mapper: fn(a) -> b) -> State(b, ctx) {
-  use ctx <- State
-  let #(v, ctx) = state.run(ctx)
-  #(mapper(v), ctx)
-}
-
-pub fn update(mapper: fn(ctx) -> ctx) -> State(Nil, ctx) {
-  use ctx <- bind(get())
-  put(mapper(ctx))
 }

@@ -27,17 +27,14 @@ fn page(
   csrf_token csrf_token: String,
   csp_nonce csp_nonce: String,
 ) -> session.State(Element(message)) {
-  use status <- state.bind({
-    session.read_flash("status")
-    |> state.map(option.from_result)
-  })
+  use status <- state.bind(session.read("status"))
 
   let app_uri =
     Uri(..uri.empty, path: "/components/app", query: {
       option.Some(
         uri.query_to_string(case status {
-          option.Some(status) -> [#("status", status)]
-          option.None -> []
+          Ok(status) -> [#("status", status)]
+          Error(Nil) -> []
         }),
       )
     })

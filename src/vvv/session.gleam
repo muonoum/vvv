@@ -138,13 +138,13 @@ pub fn id() -> State(String) {
 }
 
 pub fn replace() -> State(Nil) {
-  use ctx: Context <- state.update
-  Context(..ctx, id: extra.random_string(32))
+  use ctx <- state.bind(state.get())
+  state.put(Context(..ctx, id: extra.random_string(32)))
 }
 
 pub fn insert(key: String, value: String) -> State(Nil) {
-  use Context(data:, ..) as ctx <- state.update()
-  Context(..ctx, data: dict.insert(data, key, value))
+  use Context(data:, ..) as ctx <- state.bind(state.get())
+  state.put(Context(..ctx, data: dict.insert(data, key, value)))
 }
 
 pub fn read(key: String) -> State(Result(String, Nil)) {
@@ -153,13 +153,13 @@ pub fn read(key: String) -> State(Result(String, Nil)) {
 }
 
 pub fn delete(key: String) -> State(Nil) {
-  use Context(data:, ..) as ctx <- state.update
-  Context(..ctx, data: dict.delete(data, key))
+  use Context(data:, ..) as ctx <- state.bind(state.get())
+  state.put(Context(..ctx, data: dict.delete(data, key)))
 }
 
 pub fn insert_flash(key: String, value: String) -> State(Nil) {
-  use Context(next_flash:, ..) as ctx <- state.update()
-  Context(..ctx, next_flash: dict.insert(next_flash, key, value))
+  use Context(next_flash:, ..) as ctx <- state.bind(state.get())
+  state.put(Context(..ctx, next_flash: dict.insert(next_flash, key, value)))
 }
 
 pub fn read_flash(key: String) -> State(Result(String, Nil)) {
@@ -168,6 +168,6 @@ pub fn read_flash(key: String) -> State(Result(String, Nil)) {
 }
 
 pub fn delete_flash(key: String) -> State(Nil) {
-  use Context(next_flash:, ..) as ctx <- state.update
-  Context(..ctx, next_flash: dict.delete(next_flash, key))
+  use Context(next_flash:, ..) as ctx <- state.bind(state.get())
+  state.put(Context(..ctx, next_flash: dict.delete(next_flash, key)))
 }
