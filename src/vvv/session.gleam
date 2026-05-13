@@ -107,6 +107,7 @@ fn run_session(
   default default: fn(web.Response) -> web.Response,
 ) -> web.Response {
   let #(response, context2) = state.run(handler(), context1)
+  // use <- bool.guard(response.status >= 400, response)
 
   let session =
     Session(id: context2.id, data: context2.data, flash: context2.next_flash)
