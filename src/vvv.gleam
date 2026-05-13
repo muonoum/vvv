@@ -67,12 +67,12 @@ pub fn main() -> Nil {
 
   let handler =
     router.service(
-      app_handler:,
       target_origin:,
       auth_config:,
       session_store:,
-      static_handler: static_handler(),
       signing_key:,
+      app_handler:,
+      static_handler: static_handler(),
     )
 
   let server_spec =
