@@ -137,8 +137,8 @@ fn run_session(
 }
 
 pub fn id() -> State(String) {
-  use ctx: Context <- state.bind(state.get())
-  state.return(ctx.id)
+  use Context(id:, ..) <- state.bind(state.get())
+  state.return(id)
 }
 
 pub fn replace() -> State(Nil) {
