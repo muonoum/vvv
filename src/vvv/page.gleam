@@ -57,7 +57,7 @@ fn page(
         html.script(
           [
             attribute.type_("module"),
-            attribute.src("/lustre/lustre-server-component.mjs"),
+            attribute.src("/lustre/lustre-server-component.min.mjs"),
             attribute.nonce(csp_nonce),
           ],
           "",

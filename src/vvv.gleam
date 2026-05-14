@@ -61,18 +61,16 @@ pub fn main() -> Nil {
 
   let assert Ok(auth_config) = auth.configure_from_environment()
 
-  let app_handler = fn(request: web.Request, args: app.Args) -> web.Response {
-    component.start(request, app, args)
-  }
-
   let handler =
     router.service(
-      target_origin:,
-      auth_config:,
       session_store:,
       signing_key:,
-      app_handler:,
+      auth_config:,
+      target_origin:,
       static_handler: static_handler(),
+      app_handler: fn(request: web.Request, args: app.Args) -> web.Response {
+        component.start(request, app, args)
+      },
     )
 
   let server_spec =

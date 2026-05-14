@@ -10,7 +10,6 @@ import gleam/http/response
 import gleam/list
 import gleam/option
 import gleam/result
-import vvv/extra
 import vvv/extra/log
 import vvv/extra/state
 import vvv/store
@@ -44,6 +43,11 @@ pub type Context {
 pub type Handler =
   fn(fn() -> State(web.Response)) -> web.Response
 
+pub fn make_id() -> String {
+  crypto.strong_random_bytes(32)
+  |> bit_array.base64_url_encode(False)
+}
+
 pub fn empty_session(id: String) -> Session {
   Session(id:, data: dict.new(), flash: dict.new())
 }
@@ -55,8 +59,8 @@ fn empty_context(id: String) -> Context {
 pub fn start(
   request: web.Request,
   cookie_name cookie_name: String,
-  store store: Store,
   signing_key signing_key: String,
+  store store: Store,
 ) -> Handler {
   use handler <- function.identity
 
@@ -77,7 +81,7 @@ pub fn start(
 
   case cookie_value {
     Error(Nil) -> {
-      let context = empty_context(extra.random_string(32))
+      let context = empty_context(make_id())
       use response <- run_session(store:, context:, set_cookie:, handler:)
       let value = store.initialise(context.id)
       log.debug("Initialise session", [])
@@ -102,7 +106,7 @@ pub fn start(
 fn run_session(
   store store: Store,
   context context1: Context,
-  set_cookie set_cookie,
+  set_cookie set_cookie: fn(web.Response, String) -> web.Response,
   handler handler: fn() -> State(web.Response),
   default default: fn(web.Response) -> web.Response,
 ) -> web.Response {
@@ -139,7 +143,7 @@ pub fn id() -> State(String) {
 
 pub fn replace() -> State(Nil) {
   use ctx <- state.bind(state.get())
-  state.put(Context(..ctx, id: extra.random_string(32)))
+  state.put(Context(..ctx, id: make_id()))
 }
 
 pub fn insert(key: String, value: String) -> State(Nil) {

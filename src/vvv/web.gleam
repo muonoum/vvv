@@ -137,6 +137,12 @@ pub fn load_assets(base: String) -> Dict(List(String), Asset) {
     let full_path = filepath.join(base, relative_path)
     use <- bool.guard(extra.is_directory(full_path), Error(Nil))
     use #(content_type, hash) <- result.try(read_asset(full_path))
+
+    log.debug("Load asset", [
+      log.string("path", relative_path),
+      log.string("content-type", content_type),
+    ])
+
     let asset = Asset(relative_path:, full_path:, content_type:, hash:)
     Ok(#(uri.path_segments(relative_path), asset))
   })

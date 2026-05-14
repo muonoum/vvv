@@ -17,12 +17,12 @@ import vvv/session
 import vvv/web
 
 pub fn service(
-  app_handler app_handler: fn(web.Request, app.Args) -> web.Response,
+  session_store store: session.Store,
+  signing_key signing_key: String,
   target_origin target_origin: Uri,
   auth_config auth_config: auth.Config,
-  session_store store: session.Store,
+  app_handler app_handler: fn(web.Request, app.Args) -> web.Response,
   static_handler static: fn(web.Request, fn() -> web.Response) -> web.Response,
-  signing_key signing_key: String,
 ) -> fn(web.Request) -> web.Response {
   use request <- function.identity
   use <- web.rescue_crashes
