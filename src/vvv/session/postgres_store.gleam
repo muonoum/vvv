@@ -2,7 +2,7 @@ import envoy
 import gleam/dynamic/decode.{type Decoder}
 import gleam/erlang/process
 import gleam/function
-import gleam/json.{type Json}
+import gleam/json
 import gleam/list
 import gleam/option
 import gleam/otp/static_supervisor as supervisor
@@ -11,7 +11,7 @@ import gleam/string
 import pog
 import vvv/extra
 import vvv/extra/log
-import vvv/session.{type Session, Session}
+import vvv/session.{type Session}
 
 const create_table_sql = "
   create table if not exists sessions (
@@ -157,15 +157,8 @@ fn save_session(
 ) -> Result(pog.Returned(Nil), pog.QueryError) {
   pog.query(save_session_sql)
   |> pog.parameter(pog.text(session.id))
-  |> pog.parameter(pog.text(json.to_string(encode_session(session))))
+  |> pog.parameter(pog.text(json.to_string(session.to_json(session))))
   |> pog.execute(connection)
-}
-
-fn encode_session(session: Session) -> Json {
-  json.object([
-    #("data", json.dict(session.data, function.identity, json.string)),
-    #("flash", json.dict(session.flash, function.identity, json.string)),
-  ])
 }
 
 fn load_session(
@@ -181,7 +174,7 @@ fn load_session(
 fn session_decoder(id: String) -> Decoder(Session) {
   use string <- decode.then(decode.at([0], decode.string))
 
-  case json.parse(string, data_decoder(id)) {
+  case json.parse(string, session.data_decoder(id)) {
     Ok(session) -> decode.success(session)
 
     Error(error) -> {
@@ -189,12 +182,6 @@ fn session_decoder(id: String) -> Decoder(Session) {
       decode.success(session.empty_session(id))
     }
   }
-}
-
-fn data_decoder(id: String) -> Decoder(Session) {
-  use data <- decode.field("data", decode.dict(decode.string, decode.string))
-  use flash <- decode.field("flash", decode.dict(decode.string, decode.string))
-  decode.success(Session(id:, data:, flash:))
 }
 
 fn delete_session(
