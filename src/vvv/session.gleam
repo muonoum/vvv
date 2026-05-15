@@ -2,13 +2,11 @@ import gleam/bit_array
 import gleam/bool
 import gleam/crypto
 import gleam/dict.{type Dict}
-import gleam/dynamic/decode.{type Decoder}
 import gleam/function
 import gleam/http
 import gleam/http/cookie
 import gleam/http/request
 import gleam/http/response
-import gleam/json.{type Json}
 import gleam/list
 import gleam/option
 import gleam/result
@@ -19,9 +17,13 @@ import vvv/web
 
 pub type Store {
   Store(
+    // initialise: (id: String) -> value: String
     initialise: fn(String) -> String,
+    // load: (value: String) -> session: Session
     load: fn(String) -> Result(Session, Nil),
+    // save: (session: Session) -> value: String
     save: fn(Session) -> Result(String, Nil),
+    // replace: (previous id: String, session: Session) -> value: String
     replace: fn(String, Session) -> Result(String, Nil),
   )
 }
@@ -56,25 +58,6 @@ pub fn empty_session(id: String) -> Session {
 
 fn empty_context(id: String) -> Context {
   Context(id:, data: dict.new(), flash: dict.new(), next_flash: dict.new())
-}
-
-pub fn decoder() -> Decoder(Session) {
-  use id <- decode.field("id", decode.string)
-  data_decoder(id)
-}
-
-pub fn data_decoder(id: String) -> Decoder(Session) {
-  use data <- decode.field("data", decode.dict(decode.string, decode.string))
-  use flash <- decode.field("flash", decode.dict(decode.string, decode.string))
-  decode.success(Session(id:, data:, flash:))
-}
-
-pub fn to_json(session: Session) -> Json {
-  json.object([
-    #("id", json.string(session.id)),
-    #("data", json.dict(session.data, function.identity, json.string)),
-    #("flash", json.dict(session.flash, function.identity, json.string)),
-  ])
 }
 
 pub fn start(

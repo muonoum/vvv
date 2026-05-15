@@ -2,7 +2,7 @@ import envoy
 import gleam/dynamic/decode.{type Decoder}
 import gleam/erlang/process
 import gleam/function
-import gleam/json
+import gleam/json.{type Json}
 import gleam/list
 import gleam/option
 import gleam/otp/static_supervisor as supervisor
@@ -11,7 +11,7 @@ import gleam/string
 import pog
 import vvv/extra
 import vvv/extra/log
-import vvv/session.{type Session}
+import vvv/session.{type Session, Session}
 
 const create_table_sql = "
   create table if not exists sessions (
@@ -109,7 +109,7 @@ fn save(connection: pog.Connection) -> fn(Session) -> Result(String, Nil) {
     Ok(pog.Returned(..)) -> Ok(session.id)
 
     Error(error) -> {
-      log.error("Save session", [log.inspect("error", error)])
+      log.error("Save session failed", [log.inspect("error", error)])
       Error(Nil)
     }
   }
@@ -124,7 +124,7 @@ fn load(connection: pog.Connection) -> fn(String) -> Result(Session, Nil) {
     Ok(pog.Returned(..)) -> Error(Nil)
 
     Error(error) -> {
-      log.warning("Failed to load session", [log.inspect("error", error)])
+      log.warning("Load session failed", [log.inspect("error", error)])
       Error(Nil)
     }
   }
@@ -145,7 +145,7 @@ fn replace(
     Ok(pog.Returned(..)) -> Ok(session.id)
 
     Error(error) -> {
-      log.error("Replace session", [log.inspect("error", error)])
+      log.error("Replace session failed", [log.inspect("error", error)])
       Error(Nil)
     }
   }
@@ -157,7 +157,7 @@ fn save_session(
 ) -> Result(pog.Returned(Nil), pog.QueryError) {
   pog.query(save_session_sql)
   |> pog.parameter(pog.text(session.id))
-  |> pog.parameter(pog.text(json.to_string(session.to_json(session))))
+  |> pog.parameter(pog.text(json.to_string(encode_session(session))))
   |> pog.execute(connection)
 }
 
@@ -167,21 +167,8 @@ fn load_session(
 ) -> Result(pog.Returned(Session), pog.QueryError) {
   pog.query(load_session_sql)
   |> pog.parameter(pog.text(id))
-  |> pog.returning(session_decoder(id))
+  |> pog.returning(session_parser(id))
   |> pog.execute(connection)
-}
-
-fn session_decoder(id: String) -> Decoder(Session) {
-  use string <- decode.then(decode.at([0], decode.string))
-
-  case json.parse(string, session.data_decoder(id)) {
-    Ok(session) -> decode.success(session)
-
-    Error(error) -> {
-      log.warning("Decode session", [log.inspect("error", error)])
-      decode.success(session.empty_session(id))
-    }
-  }
 }
 
 fn delete_session(
@@ -191,4 +178,30 @@ fn delete_session(
   pog.query(delete_session_sql)
   |> pog.parameter(pog.text(id))
   |> pog.execute(connection)
+}
+
+fn encode_session(session: Session) -> Json {
+  json.object([
+    #("data", json.dict(session.data, function.identity, json.string)),
+    #("flash", json.dict(session.flash, function.identity, json.string)),
+  ])
+}
+
+fn session_parser(id: String) -> Decoder(Session) {
+  use data <- decode.then(decode.at([0], decode.string))
+
+  case json.parse(data, session_decoder(id)) {
+    Ok(session) -> decode.success(session)
+
+    Error(error) -> {
+      log.warning("Decode session failed", [log.inspect("error", error)])
+      decode.success(session.empty_session(id))
+    }
+  }
+}
+
+fn session_decoder(id: String) -> Decoder(Session) {
+  use data <- decode.field("data", decode.dict(decode.string, decode.string))
+  use flash <- decode.field("flash", decode.dict(decode.string, decode.string))
+  decode.success(Session(id:, data:, flash:))
 }
