@@ -44,7 +44,7 @@ pub type Login {
   )
 }
 
-// TODO: Token refresh 
+// TODO: Token refresh
 pub type Session {
   Session(
     user: User,
@@ -166,7 +166,7 @@ pub fn callback_handler(request: web.Request) -> web.Response {
 
       let query =
         uri.query_to_string({
-          use all, #(key, option) <- list.fold(options, required)
+          use all, #(key, option) <- list.fold(options, from: required)
           use <- extra.return(result.unwrap(_, all))
           use value <- result.map(option)
           [#(key, value), ..all]

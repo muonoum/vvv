@@ -25,12 +25,7 @@ pub type Response =
   response.Response(ewe.ResponseBody)
 
 pub type Asset {
-  Asset(
-    relative_path: String,
-    full_path: String,
-    content_type: String,
-    hash: String,
-  )
+  Asset(path: String, content_type: String, hash: String)
 }
 
 pub fn log_request(
@@ -134,16 +129,16 @@ pub fn string_data(
 pub fn load_assets(base: String) -> Dict(List(String), Asset) {
   dict.from_list({
     use relative_path <- list.filter_map(extra.wildcard(base, "**"))
-    let full_path = filepath.join(base, relative_path)
-    use <- bool.guard(extra.is_directory(full_path), Error(Nil))
-    use #(content_type, hash) <- result.try(read_asset(full_path))
+    let path = filepath.join(base, relative_path)
+    use <- bool.guard(extra.is_directory(path), Error(Nil))
+    use #(content_type, hash) <- result.try(read_asset(path))
 
     log.debug("Load asset", [
       log.string("path", relative_path),
       log.string("content-type", content_type),
     ])
 
-    let asset = Asset(relative_path:, full_path:, content_type:, hash:)
+    let asset = Asset(path:, content_type:, hash:)
     Ok(#(uri.path_segments(relative_path), asset))
   })
 }
@@ -184,10 +179,15 @@ pub fn serve_assets(
           |> empty_body
 
         Ok(_header) | Error(Nil) -> {
-          case simplifile.read_bits(asset.full_path) {
+          case simplifile.read_bits(asset.path) {
             Error(error) -> {
-              log.error("", [log.inspect("error", error)])
-              text_body(response.new(500), "Internal Server Error")
+              log.error("Could not load asset", [
+                log.string("path", asset.path),
+                log.inspect("error", error),
+              ])
+
+              response.new(500)
+              |> text_body("Internal Server Error")
             }
 
             Ok(bits) ->
